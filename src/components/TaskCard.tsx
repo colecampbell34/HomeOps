@@ -8,7 +8,8 @@ import { dueLabel, formatShortDate, getTaskStatus } from '../utils/dates';
 type TaskCardProps = {
   task: MaintenanceTask;
   roomName: string;
-  onComplete?: (taskId: string) => void;
+  onComplete?: (taskId: string) => void | Promise<void>;
+  onOpen?: (taskId: string) => void;
 };
 
 const statusStyles = {
@@ -39,7 +40,7 @@ const statusStyles = {
   },
 };
 
-export function TaskCard({ task, roomName, onComplete }: TaskCardProps) {
+export function TaskCard({ task, roomName, onComplete, onOpen }: TaskCardProps) {
   const status = getTaskStatus(task);
   const statusStyle = statusStyles[status];
 
@@ -65,17 +66,30 @@ export function TaskCard({ task, roomName, onComplete }: TaskCardProps) {
           <Text style={styles.priorityText}>{task.priority} priority</Text>
         </View>
 
-        {!!onComplete && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Complete ${task.title}`}
-            onPress={() => onComplete(task.id)}
-            style={({ pressed }) => [styles.completeButton, pressed && styles.completeButtonPressed]}
-          >
-            <Ionicons name="checkmark" size={16} color={colors.white} />
-            <Text style={styles.completeButtonText}>Done</Text>
-          </Pressable>
-        )}
+        <View style={styles.footerActions}>
+          {!!onOpen && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${task.title}`}
+              onPress={() => onOpen(task.id)}
+              style={({ pressed }) => [styles.detailsButton, pressed && styles.detailsButtonPressed]}
+            >
+              <Text style={styles.detailsButtonText}>Details</Text>
+            </Pressable>
+          )}
+
+          {!!onComplete && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Complete ${task.title}`}
+              onPress={() => onComplete(task.id)}
+              style={({ pressed }) => [styles.completeButton, pressed && styles.completeButtonPressed]}
+            >
+              <Ionicons name="checkmark" size={16} color={colors.white} />
+              <Text style={styles.completeButtonText}>Done</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
     </View>
   );
@@ -93,6 +107,7 @@ const styles = StyleSheet.create({
   cardTop: {
     alignItems: 'flex-start',
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.md,
     justifyContent: 'space-between',
   },
@@ -128,14 +143,22 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   footer: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+    justifyContent: 'space-between',
+  },
+  footerActions: {
     alignItems: 'center',
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: spacing.sm,
   },
   priority: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: spacing.xs,
+    minHeight: 36,
   },
   priorityText: {
     color: colors.textMuted,
@@ -158,5 +181,22 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: font.small,
     fontWeight: '700',
+  },
+  detailsButton: {
+    alignItems: 'center',
+    borderColor: colors.border,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    minHeight: 36,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+  },
+  detailsButtonPressed: {
+    backgroundColor: colors.surfaceMuted,
+  },
+  detailsButtonText: {
+    color: colors.primary,
+    fontSize: font.small,
+    fontWeight: '800',
   },
 });

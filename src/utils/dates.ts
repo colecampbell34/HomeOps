@@ -37,6 +37,19 @@ export function formatShortDate(value?: string): string {
   }).format(date);
 }
 
+export function formatLongDate(value?: string): string {
+  const date = toDate(value);
+  if (!date) {
+    return 'No date set';
+  }
+
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date);
+}
+
 export function dueLabel(value?: string): string {
   const days = daysFromToday(value);
 
@@ -102,6 +115,23 @@ export function addRecurrence(from: Date, recurrenceType: RecurrenceType, interv
   }
 
   return next;
+}
+
+export function recurrenceLabel(recurrenceType: RecurrenceType, interval: number): string {
+  switch (recurrenceType) {
+    case 'weekly':
+      return interval === 1 ? 'Weekly' : `Every ${interval} weeks`;
+    case 'monthly':
+      return interval === 1 ? 'Monthly' : `Every ${interval} months`;
+    case 'quarterly':
+      return interval === 1 ? 'Every 3 months' : `Every ${interval * 3} months`;
+    case 'semiannual':
+      return interval === 1 ? 'Every 6 months' : `Every ${interval * 6} months`;
+    case 'yearly':
+      return interval === 1 ? 'Yearly' : `Every ${interval} years`;
+    case 'custom':
+      return interval === 1 ? 'Daily' : `Every ${interval} days`;
+  }
 }
 
 export function toISODate(date: Date): string {

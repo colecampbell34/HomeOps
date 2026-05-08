@@ -434,6 +434,7 @@ Milestone 6: Polish
 
 Milestone 7: App Store preparation later
 - App name/branding.
+- First-run walkthrough/onboarding so new users understand Dashboard, Tasks, Rooms, Appliances, Supplies, and Seasonal checklists.
 - Screenshots.
 - Privacy policy.
 - TestFlight.

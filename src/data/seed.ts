@@ -1,158 +1,20 @@
-import { Home, MaintenanceTask, Room, TaskCompletion } from '../types';
+import { Appliance, Home, MaintenanceTask, Room, Supply, TaskCompletion } from '../types';
 
 const now = new Date().toISOString();
 
 export const seedHome: Home = {
   id: 'home-primary',
-  name: 'Campbell Home',
+  name: 'My Home',
   createdAt: now,
   updatedAt: now,
 };
 
-export const seedRooms: Room[] = [
-  {
-    id: 'room-hvac',
-    homeId: seedHome.id,
-    name: 'HVAC / Utility',
-    type: 'hvac',
-    icon: 'thermometer-outline',
-    createdAt: now,
-    updatedAt: now,
-  },
-  {
-    id: 'room-kitchen',
-    homeId: seedHome.id,
-    name: 'Kitchen',
-    type: 'kitchen',
-    icon: 'restaurant-outline',
-    createdAt: now,
-    updatedAt: now,
-  },
-  {
-    id: 'room-laundry',
-    homeId: seedHome.id,
-    name: 'Laundry',
-    type: 'laundry',
-    icon: 'shirt-outline',
-    createdAt: now,
-    updatedAt: now,
-  },
-  {
-    id: 'room-exterior',
-    homeId: seedHome.id,
-    name: 'Exterior',
-    type: 'exterior',
-    icon: 'home-outline',
-    createdAt: now,
-    updatedAt: now,
-  },
-];
+export const seedRooms: Room[] = [];
 
-export const seedTasks: MaintenanceTask[] = [
-  {
-    id: 'task-furnace-filter',
-    homeId: seedHome.id,
-    roomId: 'room-hvac',
-    title: 'Replace furnace filter',
-    category: 'HVAC',
-    notes: 'Use 16 x 25 x 1 MERV 11 filter. Keep two spares in utility closet.',
-    priority: 'high',
-    recurrenceType: 'quarterly',
-    recurrenceInterval: 1,
-    lastCompletedAt: '2026-01-12T12:00:00.000Z',
-    nextDueAt: '2026-04-12T12:00:00.000Z',
-    supplyInfo: '16 x 25 x 1 MERV 11',
-    createdAt: now,
-    updatedAt: now,
-  },
-  {
-    id: 'task-smoke-alarms',
-    homeId: seedHome.id,
-    title: 'Test smoke and CO detectors',
-    category: 'Safety',
-    notes: 'Test all floors and replace batteries if chirping.',
-    priority: 'high',
-    recurrenceType: 'monthly',
-    recurrenceInterval: 1,
-    lastCompletedAt: '2026-04-07T12:00:00.000Z',
-    nextDueAt: '2026-05-07T12:00:00.000Z',
-    supplyInfo: '9V batteries',
-    createdAt: now,
-    updatedAt: now,
-  },
-  {
-    id: 'task-dryer-vent',
-    homeId: seedHome.id,
-    roomId: 'room-laundry',
-    title: 'Clean dryer lint path',
-    category: 'Laundry',
-    notes: 'Vacuum lint trap cavity and check exterior vent flap.',
-    priority: 'medium',
-    recurrenceType: 'semiannual',
-    recurrenceInterval: 1,
-    lastCompletedAt: '2025-11-20T12:00:00.000Z',
-    nextDueAt: '2026-05-20T12:00:00.000Z',
-    createdAt: now,
-    updatedAt: now,
-  },
-  {
-    id: 'task-fridge-filter',
-    homeId: seedHome.id,
-    roomId: 'room-kitchen',
-    title: 'Change fridge water filter',
-    category: 'Appliance',
-    notes: 'Reset filter indicator after replacing.',
-    priority: 'medium',
-    recurrenceType: 'semiannual',
-    recurrenceInterval: 1,
-    lastCompletedAt: '2025-12-03T12:00:00.000Z',
-    nextDueAt: '2026-06-03T12:00:00.000Z',
-    supplyInfo: 'EveryDrop Filter 4',
-    createdAt: now,
-    updatedAt: now,
-  },
-  {
-    id: 'task-gutters',
-    homeId: seedHome.id,
-    roomId: 'room-exterior',
-    title: 'Inspect and clean gutters',
-    category: 'Exterior',
-    notes: 'Check downspouts and look for loose brackets.',
-    priority: 'medium',
-    recurrenceType: 'semiannual',
-    recurrenceInterval: 1,
-    lastCompletedAt: '2025-10-15T12:00:00.000Z',
-    nextDueAt: '2026-05-18T12:00:00.000Z',
-    createdAt: now,
-    updatedAt: now,
-  },
-  {
-    id: 'task-dishwasher-filter',
-    homeId: seedHome.id,
-    roomId: 'room-kitchen',
-    title: 'Clean dishwasher filter',
-    category: 'Kitchen',
-    notes: 'Rinse filter under warm water and check spray arm holes.',
-    priority: 'low',
-    recurrenceType: 'monthly',
-    recurrenceInterval: 1,
-    lastCompletedAt: '2026-04-26T12:00:00.000Z',
-    nextDueAt: '2026-05-26T12:00:00.000Z',
-    createdAt: now,
-    updatedAt: now,
-  },
-];
+export const seedTasks: MaintenanceTask[] = [];
 
-export const seedCompletions: TaskCompletion[] = [
-  {
-    id: 'completion-dishwasher-april',
-    taskId: 'task-dishwasher-filter',
-    completedAt: '2026-04-26T12:00:00.000Z',
-    notes: 'Filter was clear. Spray arm had a small piece of plastic.',
-  },
-  {
-    id: 'completion-smoke-april',
-    taskId: 'task-smoke-alarms',
-    completedAt: '2026-04-07T12:00:00.000Z',
-  },
-];
+export const seedCompletions: TaskCompletion[] = [];
+
+export const seedAppliances: Appliance[] = [];
+
+export const seedSupplies: Supply[] = [];

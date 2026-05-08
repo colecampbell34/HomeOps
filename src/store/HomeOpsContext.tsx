@@ -1,26 +1,199 @@
-import { PropsWithChildren, createContext, useContext, useMemo, useState } from 'react';
+import { PropsWithChildren, createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-import { seedCompletions, seedHome, seedRooms, seedTasks } from '../data/seed';
+import { seedHome, seedRooms } from '../data/seed';
+import {
+  initializeDatabase,
+  loadHomeOpsSnapshot,
+  persistAppliance,
+  persistMaintenanceTask,
+  persistRoom,
+  persistSupply,
+  persistTaskCompletion,
+  persistWalkthroughCompleted,
+  updateAppliance,
+  updateMaintenanceTask,
+  updateSupply,
+} from '../storage/database';
 import { addRecurrence, compareDueDate, getTaskStatus, toISODate, today } from '../utils/dates';
-import { Home, MaintenanceTask, Room, TaskCompletion } from '../types';
+import {
+  Appliance,
+  CreateApplianceInput,
+  CreateMaintenanceTaskInput,
+  CreateRoomInput,
+  CreateSupplyInput,
+  Home,
+  MaintenanceTask,
+  Room,
+  Supply,
+  TaskCompletion,
+} from '../types';
 
 type HomeOpsState = {
   home: Home;
   rooms: Room[];
   tasks: MaintenanceTask[];
   completions: TaskCompletion[];
+  appliances: Appliance[];
+  supplies: Supply[];
+  isReady: boolean;
+  hasCompletedWalkthrough: boolean;
+  error?: string;
   overdueTasks: MaintenanceTask[];
   upcomingTasks: MaintenanceTask[];
   recentCompletions: Array<TaskCompletion & { task?: MaintenanceTask }>;
-  completeTask: (taskId: string, notes?: string) => void;
+  completeTask: (taskId: string, notes?: string) => Promise<void>;
+  addRoom: (input: CreateRoomInput) => Promise<void>;
+  addTask: (input: CreateMaintenanceTaskInput) => Promise<void>;
+  updateTask: (taskId: string, input: CreateMaintenanceTaskInput) => Promise<void>;
+  addAppliance: (input: CreateApplianceInput) => Promise<void>;
+  updateAppliance: (applianceId: string, input: CreateApplianceInput) => Promise<void>;
+  addSupply: (input: CreateSupplyInput) => Promise<void>;
+  updateSupply: (supplyId: string, input: CreateSupplyInput) => Promise<void>;
+  completeWalkthrough: () => Promise<void>;
   getRoomName: (roomId?: string) => string;
+  getApplianceName: (applianceId?: string) => string;
+  getTaskTitle: (taskId?: string) => string;
 };
 
 const HomeOpsContext = createContext<HomeOpsState | undefined>(undefined);
 
 export function HomeOpsProvider({ children }: PropsWithChildren) {
-  const [tasks, setTasks] = useState<MaintenanceTask[]>(seedTasks);
-  const [completions, setCompletions] = useState<TaskCompletion[]>(seedCompletions);
+  const [home, setHome] = useState<Home>(seedHome);
+  const [rooms, setRooms] = useState<Room[]>(seedRooms);
+  const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
+  const [completions, setCompletions] = useState<TaskCompletion[]>([]);
+  const [appliances, setAppliances] = useState<Appliance[]>([]);
+  const [supplies, setSupplies] = useState<Supply[]>([]);
+  const [isReady, setIsReady] = useState(false);
+  const [hasCompletedWalkthrough, setHasCompletedWalkthrough] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+
+  const refreshSnapshot = useCallback(async () => {
+    const snapshot = await loadHomeOpsSnapshot();
+    setHome(snapshot.home);
+    setRooms(snapshot.rooms);
+    setTasks(snapshot.tasks);
+    setCompletions(snapshot.completions);
+    setAppliances(snapshot.appliances);
+    setSupplies(snapshot.supplies);
+    setHasCompletedWalkthrough(snapshot.hasCompletedWalkthrough);
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function load() {
+      try {
+        await initializeDatabase();
+        const snapshot = await loadHomeOpsSnapshot();
+
+        if (!isMounted) {
+          return;
+        }
+
+        setHome(snapshot.home);
+        setRooms(snapshot.rooms);
+        setTasks(snapshot.tasks);
+        setCompletions(snapshot.completions);
+        setAppliances(snapshot.appliances);
+        setSupplies(snapshot.supplies);
+        setHasCompletedWalkthrough(snapshot.hasCompletedWalkthrough);
+        setError(undefined);
+      } catch (loadError) {
+        if (isMounted) {
+          setError(loadError instanceof Error ? loadError.message : 'Unable to load HomeOps data.');
+        }
+      } finally {
+        if (isMounted) {
+          setIsReady(true);
+        }
+      }
+    }
+
+    load();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const completeTask = useCallback(
+    async (taskId: string, notes?: string) => {
+      const task = tasks.find((currentTask) => currentTask.id === taskId);
+
+      if (!task) {
+        return;
+      }
+
+      const completedAt = toISODate(today());
+      const nextDueAt = toISODate(addRecurrence(today(), task.recurrenceType, task.recurrenceInterval));
+
+      await persistTaskCompletion(task, completedAt, nextDueAt, notes);
+      await refreshSnapshot();
+    },
+    [refreshSnapshot, tasks],
+  );
+
+  const addTask = useCallback(
+    async (input: CreateMaintenanceTaskInput) => {
+      await persistMaintenanceTask(home.id, input);
+      await refreshSnapshot();
+    },
+    [home.id, refreshSnapshot],
+  );
+
+  const addRoom = useCallback(
+    async (input: CreateRoomInput) => {
+      await persistRoom(home.id, input);
+      await refreshSnapshot();
+    },
+    [home.id, refreshSnapshot],
+  );
+
+  const updateTask = useCallback(
+    async (taskId: string, input: CreateMaintenanceTaskInput) => {
+      await updateMaintenanceTask(taskId, input);
+      await refreshSnapshot();
+    },
+    [refreshSnapshot],
+  );
+
+  const addAppliance = useCallback(
+    async (input: CreateApplianceInput) => {
+      await persistAppliance(home.id, input);
+      await refreshSnapshot();
+    },
+    [home.id, refreshSnapshot],
+  );
+
+  const saveAppliance = useCallback(
+    async (applianceId: string, input: CreateApplianceInput) => {
+      await updateAppliance(applianceId, input);
+      await refreshSnapshot();
+    },
+    [refreshSnapshot],
+  );
+
+  const addSupply = useCallback(
+    async (input: CreateSupplyInput) => {
+      await persistSupply(home.id, input);
+      await refreshSnapshot();
+    },
+    [home.id, refreshSnapshot],
+  );
+
+  const saveSupply = useCallback(
+    async (supplyId: string, input: CreateSupplyInput) => {
+      await updateSupply(supplyId, input);
+      await refreshSnapshot();
+    },
+    [refreshSnapshot],
+  );
+
+  const completeWalkthrough = useCallback(async () => {
+    await persistWalkthroughCompleted();
+    setHasCompletedWalkthrough(true);
+  }, []);
 
   const value = useMemo<HomeOpsState>(() => {
     const activeTasks = tasks.filter((task) => !task.archivedAt);
@@ -41,44 +214,52 @@ export function HomeOpsProvider({ children }: PropsWithChildren) {
       }));
 
     return {
-      home: seedHome,
-      rooms: seedRooms,
+      home,
+      rooms,
       tasks: activeTasks,
       completions,
+      appliances,
+      supplies,
+      isReady,
+      hasCompletedWalkthrough,
+      error,
       overdueTasks,
       upcomingTasks,
       recentCompletions,
-      completeTask: (taskId: string, notes?: string) => {
-        const completedAt = toISODate(today());
-
-        setTasks((currentTasks) =>
-          currentTasks.map((task) => {
-            if (task.id !== taskId) {
-              return task;
-            }
-
-            return {
-              ...task,
-              lastCompletedAt: completedAt,
-              nextDueAt: toISODate(addRecurrence(today(), task.recurrenceType, task.recurrenceInterval)),
-              updatedAt: completedAt,
-            };
-          }),
-        );
-
-        setCompletions((currentCompletions) => [
-          {
-            id: `completion-${taskId}-${Date.now()}`,
-            taskId,
-            completedAt,
-            notes,
-          },
-          ...currentCompletions,
-        ]);
-      },
-      getRoomName: (roomId?: string) => seedRooms.find((room) => room.id === roomId)?.name ?? 'Whole home',
+      completeTask,
+      addRoom,
+      addTask,
+      updateTask,
+      addAppliance,
+      updateAppliance: saveAppliance,
+      addSupply,
+      updateSupply: saveSupply,
+      completeWalkthrough,
+      getRoomName: (roomId?: string) => rooms.find((room) => room.id === roomId)?.name ?? 'Whole home',
+      getApplianceName: (applianceId?: string) =>
+        appliances.find((appliance) => appliance.id === applianceId)?.name ?? 'No appliance linked',
+      getTaskTitle: (taskId?: string) => tasks.find((task) => task.id === taskId)?.title ?? 'No task linked',
     };
-  }, [completions, tasks]);
+  }, [
+    addAppliance,
+    addRoom,
+    addSupply,
+    addTask,
+    appliances,
+    completeTask,
+    completeWalkthrough,
+    completions,
+    error,
+    hasCompletedWalkthrough,
+    home,
+    isReady,
+    rooms,
+    saveAppliance,
+    saveSupply,
+    supplies,
+    tasks,
+    updateTask,
+  ]);
 
   return <HomeOpsContext.Provider value={value}>{children}</HomeOpsContext.Provider>;
 }

@@ -1,6 +1,11 @@
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
+import { EmptyState } from '../../src/components/EmptyState';
+import { ErrorBanner } from '../../src/components/ErrorBanner';
+import { QuickAddTaskModal } from '../../src/components/QuickAddTaskModal';
 import { Screen } from '../../src/components/Screen';
 import { SectionHeader } from '../../src/components/SectionHeader';
 import { TaskCard } from '../../src/components/TaskCard';
@@ -9,7 +14,10 @@ import { colors, font, radii, spacing } from '../../src/theme';
 import { formatShortDate } from '../../src/utils/dates';
 
 export default function DashboardScreen() {
-  const { completeTask, getRoomName, home, overdueTasks, recentCompletions, tasks, upcomingTasks } = useHomeOps();
+  const router = useRouter();
+  const { addTask, completeTask, error, getRoomName, home, isReady, overdueTasks, recentCompletions, rooms, tasks, upcomingTasks } =
+    useHomeOps();
+  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const tasksDueSoon = upcomingTasks.filter((task) => {
     if (!task.nextDueAt) {
       return false;
@@ -24,15 +32,36 @@ export default function DashboardScreen() {
   }).length;
 
   const statusTone = overdueTasks.length > 0 ? 'Needs attention' : tasksDueSoon > 0 ? 'On track' : 'Steady';
+  const hasAnyActivity = tasks.length > 0 || rooms.length > 0 || recentCompletions.length > 0;
+
+  if (!isReady) {
+    return (
+      <Screen>
+        <View style={styles.emptyBlock}>
+          <Text style={styles.emptyTitle}>Loading HomeOps</Text>
+          <Text style={styles.emptyText}>Preparing your local home maintenance data.</Text>
+        </View>
+      </Screen>
+    );
+  }
 
   return (
     <Screen>
+      {!!error && (
+        <ErrorBanner title="Storage needs attention" message={error} />
+      )}
+
       <View style={styles.header}>
         <View style={styles.headerText}>
           <Text style={styles.eyebrow}>{home.name}</Text>
           <Text style={styles.title}>Home dashboard</Text>
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Quick add task" style={styles.quickAdd}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Quick add task"
+          onPress={() => setIsQuickAddOpen(true)}
+          style={styles.quickAdd}
+        >
           <Ionicons name="add" size={22} color={colors.white} />
         </Pressable>
       </View>
@@ -42,7 +71,9 @@ export default function DashboardScreen() {
           <Text style={styles.statusLabel}>Home status</Text>
           <Text style={styles.statusTitle}>{statusTone}</Text>
           <Text style={styles.statusText}>
-            {overdueTasks.length} overdue · {tasksDueSoon} due soon · {tasks.length} active tasks
+            {hasAnyActivity
+              ? `${overdueTasks.length} overdue · ${tasksDueSoon} due soon · ${tasks.length} active tasks`
+              : 'Start by adding rooms, recurring tasks, or supplies you buy repeatedly.'}
           </Text>
         </View>
         <View style={styles.statusMeter}>
@@ -51,12 +82,24 @@ export default function DashboardScreen() {
         </View>
       </View>
 
+      {!hasAnyActivity && (
+        <View style={styles.tipPanel}>
+          <View style={styles.tipIcon}>
+            <Ionicons name="bulb-outline" size={20} color={colors.primary} />
+          </View>
+          <View style={styles.tipCopy}>
+            <Text style={styles.tipTitle}>Good first setup steps</Text>
+            <Text style={styles.tipText}>Add a room, then add one recurring task like testing smoke alarms or replacing a filter.</Text>
+          </View>
+        </View>
+      )}
+
       <View style={styles.actionsRow}>
-        <Pressable accessibilityRole="button" style={styles.actionButton}>
+        <Pressable accessibilityRole="button" onPress={() => router.push('/seasonal')} style={styles.actionButton}>
           <Ionicons name="calendar-outline" size={18} color={colors.primary} />
           <Text style={styles.actionText}>Seasonal</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" style={styles.actionButton}>
+        <Pressable accessibilityRole="button" onPress={() => router.push('/(tabs)/assets')} style={styles.actionButton}>
           <Ionicons name="cube-outline" size={18} color={colors.primary} />
           <Text style={styles.actionText}>Supplies</Text>
         </Pressable>
@@ -64,35 +107,77 @@ export default function DashboardScreen() {
 
       <SectionHeader title="Overdue" count={overdueTasks.length} />
       {overdueTasks.length === 0 ? (
-        <View style={styles.emptyBlock}>
-          <Text style={styles.emptyTitle}>Nothing overdue</Text>
-          <Text style={styles.emptyText}>Upcoming work will stay visible here before it becomes urgent.</Text>
-        </View>
+        <EmptyState
+          icon="checkmark-circle-outline"
+          title={tasks.length === 0 ? 'No tasks yet' : 'Nothing overdue'}
+          body={
+            tasks.length === 0
+              ? 'Use the + button to add maintenance you want HomeOps to track.'
+              : 'Upcoming work will stay visible here before it becomes urgent.'
+          }
+          actionLabel={tasks.length === 0 ? 'Add task' : undefined}
+          onAction={tasks.length === 0 ? () => setIsQuickAddOpen(true) : undefined}
+        />
       ) : (
         overdueTasks.map((task) => (
-          <TaskCard key={task.id} task={task} roomName={getRoomName(task.roomId)} onComplete={completeTask} />
+          <TaskCard
+            key={task.id}
+            task={task}
+            roomName={getRoomName(task.roomId)}
+            onComplete={completeTask}
+            onOpen={(taskId) => router.push(`/task/${taskId}`)}
+          />
         ))
       )}
 
       <SectionHeader title="Upcoming" count={upcomingTasks.length} />
-      {upcomingTasks.slice(0, 4).map((task) => (
-        <TaskCard key={task.id} task={task} roomName={getRoomName(task.roomId)} onComplete={completeTask} />
-      ))}
+      {upcomingTasks.length === 0 ? (
+        <EmptyState
+          icon="calendar-outline"
+          title="No upcoming work"
+          body="Recurring tasks will appear here once they have a next due date."
+        />
+      ) : (
+        upcomingTasks.slice(0, 4).map((task) => (
+          <TaskCard
+            key={task.id}
+            task={task}
+            roomName={getRoomName(task.roomId)}
+            onComplete={completeTask}
+            onOpen={(taskId) => router.push(`/task/${taskId}`)}
+          />
+        ))
+      )}
 
       <SectionHeader title="Recently completed" count={recentCompletions.length} />
-      <View style={styles.historyList}>
-        {recentCompletions.map((completion) => (
-          <View key={completion.id} style={styles.historyRow}>
-            <View style={styles.historyIcon}>
-              <Ionicons name="checkmark" size={15} color={colors.primary} />
+      {recentCompletions.length === 0 ? (
+        <EmptyState
+          icon="time-outline"
+          title="No completion history"
+          body="When you mark a task done, HomeOps keeps a simple record here."
+        />
+      ) : (
+        <View style={styles.historyList}>
+          {recentCompletions.map((completion) => (
+            <View key={completion.id} style={styles.historyRow}>
+              <View style={styles.historyIcon}>
+                <Ionicons name="checkmark" size={15} color={colors.primary} />
+              </View>
+              <View style={styles.historyText}>
+                <Text style={styles.historyTitle}>{completion.task?.title ?? 'Maintenance task'}</Text>
+                <Text style={styles.historyMeta}>{formatShortDate(completion.completedAt)}</Text>
+              </View>
             </View>
-            <View style={styles.historyText}>
-              <Text style={styles.historyTitle}>{completion.task?.title ?? 'Maintenance task'}</Text>
-              <Text style={styles.historyMeta}>{formatShortDate(completion.completedAt)}</Text>
-            </View>
-          </View>
-        ))}
-      </View>
+          ))}
+        </View>
+      )}
+
+      <QuickAddTaskModal
+        visible={isQuickAddOpen}
+        rooms={rooms}
+        onClose={() => setIsQuickAddOpen(false)}
+        onSubmit={addTask}
+      />
     </Screen>
   );
 }
@@ -194,6 +279,39 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: font.small,
     fontWeight: '800',
+  },
+  tipPanel: {
+    alignItems: 'flex-start',
+    backgroundColor: colors.amberSurface,
+    borderColor: '#F1D2A9',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.md,
+    padding: spacing.lg,
+  },
+  tipIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  tipCopy: {
+    flex: 1,
+    gap: spacing.xs,
+    minWidth: 0,
+  },
+  tipTitle: {
+    color: colors.text,
+    fontSize: font.body,
+    fontWeight: '800',
+  },
+  tipText: {
+    color: colors.textMuted,
+    fontSize: font.small,
+    lineHeight: 19,
   },
   emptyBlock: {
     backgroundColor: colors.surface,
