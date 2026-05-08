@@ -3,6 +3,7 @@ import { Stack, usePathname, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 
 import { WalkthroughCoach } from '../src/components/WalkthroughCoach';
 import { HomeOpsProvider, useHomeOps } from '../src/store/HomeOpsContext';
@@ -36,6 +37,7 @@ export default function RootLayout() {
           <Stack screenOptions={{ headerShown: false }} />
           <WalkthroughCoach />
           <Analytics />
+          <SpeedInsights />
         </WalkthroughTourProvider>
       </HomeOpsProvider>
     </SafeAreaProvider>
