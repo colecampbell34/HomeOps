@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Stack, usePathname, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Analytics } from '@vercel/analytics/react';
 
 import { WalkthroughCoach } from '../src/components/WalkthroughCoach';
 import { HomeOpsProvider, useHomeOps } from '../src/store/HomeOpsContext';
@@ -34,6 +35,7 @@ export default function RootLayout() {
           <WalkthroughGate />
           <Stack screenOptions={{ headerShown: false }} />
           <WalkthroughCoach />
+          <Analytics />
         </WalkthroughTourProvider>
       </HomeOpsProvider>
     </SafeAreaProvider>
