@@ -1,12 +1,14 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useState } from 'react';
 
 import { EmptyState } from '../../src/components/EmptyState';
 import { IconButton } from '../../src/components/IconButton';
 import { Screen } from '../../src/components/Screen';
 import { useHomeOps } from '../../src/store/HomeOpsContext';
 import { colors, font, radii, spacing } from '../../src/theme';
+import { HomeOpsSnapshot } from '../../src/storage/database';
 
 const settingsContent = {
   'home-profile': {
@@ -24,8 +26,8 @@ const settingsContent = {
   'export-backup': {
     icon: 'download-outline',
     title: 'Export and backup',
-    body: 'Export and backup are placeholders for a later milestone. The app is local-first today.',
-    points: ['SQLite stores MVP data on device.', 'Future exports may include maintenance history and home summaries.', 'Future backup can be added without changing the core data model.'],
+    body: 'HomeOps is local-first today, so the web app can export a JSON backup and restore it into this browser later.',
+    points: ['Export includes rooms, tasks, appliances, supplies, completion history, and walkthrough state.', 'Import replaces the current local data in this browser.', 'Cloud backup can still be added later without changing the local data model.'],
   },
   premium: {
     icon: 'star-outline',
@@ -58,8 +60,103 @@ type SettingsSection = keyof typeof settingsContent;
 export default function SettingsDetailScreen() {
   const router = useRouter();
   const { section } = useLocalSearchParams<{ section: string }>();
-  const { home, tasks, appliances, supplies, rooms } = useHomeOps();
+  const { home, tasks, appliances, supplies, rooms, exportData, importData, resetData } = useHomeOps();
+  const [backupStatus, setBackupStatus] = useState<string | undefined>();
+  const [isBackupBusy, setIsBackupBusy] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
   const content = settingsContent[section as SettingsSection];
+
+  async function handleExport() {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') {
+      setBackupStatus('Export is available in the web build.');
+      return;
+    }
+
+    setIsBackupBusy(true);
+    setBackupStatus(undefined);
+
+    try {
+      const snapshot = await exportData();
+      const payload = {
+        app: 'HomeOps',
+        version: 2,
+        exportedAt: new Date().toISOString(),
+        snapshot,
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+
+      anchor.href = url;
+      anchor.download = `homeops-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setBackupStatus('Backup exported.');
+    } catch (error) {
+      setBackupStatus(error instanceof Error ? error.message : 'Unable to export backup.');
+    } finally {
+      setIsBackupBusy(false);
+    }
+  }
+
+  async function handleImport() {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') {
+      setBackupStatus('Import is available in the web build.');
+      return;
+    }
+
+    const input = document.createElement('input');
+
+    input.type = 'file';
+    input.accept = 'application/json';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+
+      if (!file) {
+        return;
+      }
+
+      setIsBackupBusy(true);
+      setBackupStatus(undefined);
+
+      try {
+        const parsed = JSON.parse(await file.text()) as unknown;
+        const snapshot = getSnapshotFromImport(parsed);
+
+        if (!snapshot) {
+          throw new Error('That file does not look like a HomeOps backup.');
+        }
+
+        await importData(snapshot);
+        setBackupStatus('Backup imported.');
+      } catch (error) {
+        setBackupStatus(error instanceof Error ? error.message : 'Unable to import backup.');
+      } finally {
+        setIsBackupBusy(false);
+      }
+    };
+    input.click();
+  }
+
+  async function handleReset() {
+    if (!confirmReset) {
+      setConfirmReset(true);
+      setBackupStatus('Press reset again to replace local data with the starter HomeOps data.');
+      return;
+    }
+
+    setIsBackupBusy(true);
+
+    try {
+      await resetData();
+      setBackupStatus('Local data reset.');
+      setConfirmReset(false);
+    } catch (error) {
+      setBackupStatus(error instanceof Error ? error.message : 'Unable to reset local data.');
+    } finally {
+      setIsBackupBusy(false);
+    }
+  }
 
   if (!content) {
     return (
@@ -107,8 +204,61 @@ export default function SettingsDetailScreen() {
           <Stat label="Assets" value={String(appliances.length + supplies.length)} />
         </View>
       )}
+
+      {section === 'export-backup' && (
+        <View style={styles.block}>
+          <Pressable
+            accessibilityRole="button"
+            disabled={isBackupBusy}
+            onPress={handleExport}
+            style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
+          >
+            <Ionicons name="download-outline" size={18} color={colors.primary} />
+            <Text style={styles.actionButtonText}>{isBackupBusy ? 'Working' : 'Export backup'}</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            disabled={isBackupBusy}
+            onPress={handleImport}
+            style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
+          >
+            <Ionicons name="cloud-upload-outline" size={18} color={colors.primary} />
+            <Text style={styles.actionButtonText}>Import backup</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            disabled={isBackupBusy}
+            onPress={handleReset}
+            style={({ pressed }) => [styles.dangerButton, pressed && styles.dangerButtonPressed]}
+          >
+            <Ionicons name={confirmReset ? 'alert-circle-outline' : 'refresh-outline'} size={18} color={colors.red} />
+            <Text style={styles.dangerButtonText}>{confirmReset ? 'Confirm reset local data' : 'Reset local data'}</Text>
+          </Pressable>
+          {!!backupStatus && <Text style={styles.statusText}>{backupStatus}</Text>}
+        </View>
+      )}
     </Screen>
   );
+}
+
+function getSnapshotFromImport(parsed: unknown): HomeOpsSnapshot | undefined {
+  const maybeRecord = parsed as Partial<HomeOpsSnapshot> & { snapshot?: HomeOpsSnapshot };
+  const candidate = maybeRecord.snapshot ?? maybeRecord;
+
+  if (
+    candidate &&
+    typeof candidate === 'object' &&
+    'home' in candidate &&
+    Array.isArray(candidate.rooms) &&
+    Array.isArray(candidate.tasks) &&
+    Array.isArray(candidate.completions) &&
+    Array.isArray(candidate.appliances) &&
+    Array.isArray(candidate.supplies)
+  ) {
+    return candidate as HomeOpsSnapshot;
+  }
+
+  return undefined;
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
@@ -204,5 +354,49 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: font.body,
     fontWeight: '800',
+  },
+  actionButton: {
+    alignItems: 'center',
+    borderColor: colors.border,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+  },
+  actionButtonPressed: {
+    backgroundColor: colors.surfaceMuted,
+  },
+  actionButtonText: {
+    color: colors.primary,
+    fontSize: font.body,
+    fontWeight: '800',
+  },
+  dangerButton: {
+    alignItems: 'center',
+    borderColor: '#F1C7C0',
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+  },
+  dangerButtonPressed: {
+    backgroundColor: colors.redSurface,
+  },
+  dangerButtonText: {
+    color: colors.red,
+    fontSize: font.body,
+    fontWeight: '800',
+  },
+  statusText: {
+    color: colors.textMuted,
+    fontSize: font.small,
+    lineHeight: 19,
+    textAlign: 'center',
   },
 });

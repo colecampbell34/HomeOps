@@ -15,7 +15,7 @@ import { formatShortDate } from '../../src/utils/dates';
 
 export default function DashboardScreen() {
   const router = useRouter();
-  const { addTask, completeTask, error, getRoomName, home, isReady, overdueTasks, recentCompletions, rooms, tasks, upcomingTasks } =
+  const { addTask, appliances, completeTask, error, getRoomName, home, isReady, overdueTasks, recentCompletions, rooms, tasks, upcomingTasks } =
     useHomeOps();
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const tasksDueSoon = upcomingTasks.filter((task) => {
@@ -175,6 +175,7 @@ export default function DashboardScreen() {
       <QuickAddTaskModal
         visible={isQuickAddOpen}
         rooms={rooms}
+        appliances={appliances}
         onClose={() => setIsQuickAddOpen(false)}
         onSubmit={addTask}
       />

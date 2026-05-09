@@ -369,6 +369,154 @@ export async function loadHomeOpsSnapshot(): Promise<HomeOpsSnapshot> {
   };
 }
 
+export async function exportHomeOpsSnapshot(): Promise<HomeOpsSnapshot> {
+  return loadHomeOpsSnapshot();
+}
+
+export async function importHomeOpsSnapshot(snapshot: HomeOpsSnapshot) {
+  const db = await databasePromise;
+  const home = snapshot.home ?? seedHome;
+  const rooms = Array.isArray(snapshot.rooms) ? snapshot.rooms : seedRooms;
+  const tasks = Array.isArray(snapshot.tasks) ? snapshot.tasks : seedTasks;
+  const completions = Array.isArray(snapshot.completions) ? snapshot.completions : seedCompletions;
+  const appliances = Array.isArray(snapshot.appliances) ? snapshot.appliances : seedAppliances;
+  const supplies = Array.isArray(snapshot.supplies) ? snapshot.supplies : seedSupplies;
+
+  await db.withTransactionAsync(async () => {
+    await db.execAsync(`
+      DELETE FROM task_completions;
+      DELETE FROM maintenance_tasks;
+      DELETE FROM supplies;
+      DELETE FROM appliances;
+      DELETE FROM rooms;
+      DELETE FROM homes;
+      DELETE FROM app_meta;
+    `);
+
+    await db.runAsync(
+      `INSERT INTO homes (id, name, address, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)`,
+      home.id,
+      home.name,
+      nullable(home.address),
+      home.createdAt,
+      home.updatedAt,
+    );
+
+    for (const room of rooms) {
+      await db.runAsync(
+        `INSERT INTO rooms (id, homeId, name, type, icon, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        room.id,
+        room.homeId,
+        room.name,
+        room.type,
+        room.icon,
+        room.createdAt,
+        room.updatedAt,
+      );
+    }
+
+    for (const appliance of appliances) {
+      await db.runAsync(
+        `INSERT INTO appliances (
+          id, homeId, roomId, name, brand, modelNumber, serialNumber, purchaseDate,
+          manualUri, manualUrl, photoUri, notes, createdAt, updatedAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        appliance.id,
+        appliance.homeId,
+        nullable(appliance.roomId),
+        appliance.name,
+        nullable(appliance.brand),
+        nullable(appliance.modelNumber),
+        nullable(appliance.serialNumber),
+        nullable(appliance.purchaseDate),
+        nullable(appliance.manualUri),
+        nullable(appliance.manualUrl),
+        nullable(appliance.photoUri),
+        nullable(appliance.notes),
+        appliance.createdAt,
+        appliance.updatedAt,
+      );
+    }
+
+    for (const supply of supplies) {
+      await db.runAsync(
+        `INSERT INTO supplies (
+          id, homeId, applianceId, taskId, name, type, sizeOrModel, brand,
+          notes, photoUri, lastPurchasedAt, createdAt, updatedAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        supply.id,
+        supply.homeId,
+        nullable(supply.applianceId),
+        nullable(supply.taskId),
+        supply.name,
+        supply.type,
+        nullable(supply.sizeOrModel),
+        nullable(supply.brand),
+        nullable(supply.notes),
+        nullable(supply.photoUri),
+        nullable(supply.lastPurchasedAt),
+        supply.createdAt,
+        supply.updatedAt,
+      );
+    }
+
+    for (const task of tasks) {
+      await db.runAsync(
+        `INSERT INTO maintenance_tasks (
+          id, homeId, roomId, applianceId, title, category, notes, priority, recurrenceType,
+          recurrenceInterval, lastCompletedAt, nextDueAt, photoUri, supplyInfo, createdAt, updatedAt, archivedAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        task.id,
+        task.homeId,
+        nullable(task.roomId),
+        nullable(task.applianceId),
+        task.title,
+        task.category,
+        nullable(task.notes),
+        task.priority,
+        task.recurrenceType,
+        task.recurrenceInterval,
+        nullable(task.lastCompletedAt),
+        nullable(task.nextDueAt),
+        nullable(task.photoUri),
+        nullable(task.supplyInfo),
+        task.createdAt,
+        task.updatedAt,
+        nullable(task.archivedAt),
+      );
+    }
+
+    for (const completion of completions) {
+      await db.runAsync(
+        `INSERT INTO task_completions (id, taskId, completedAt, notes, photoUri) VALUES (?, ?, ?, ?, ?)`,
+        completion.id,
+        completion.taskId,
+        completion.completedAt,
+        nullable(completion.notes),
+        nullable(completion.photoUri),
+      );
+    }
+
+    await db.runAsync(
+      `INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)`,
+      'hasCompletedWalkthrough',
+      snapshot.hasCompletedWalkthrough ? 'true' : 'false',
+    );
+  });
+}
+
+export async function resetHomeOpsData() {
+  await importHomeOpsSnapshot({
+    home: seedHome,
+    rooms: seedRooms,
+    tasks: seedTasks,
+    completions: seedCompletions,
+    appliances: seedAppliances,
+    supplies: seedSupplies,
+    hasCompletedWalkthrough: false,
+  });
+}
+
 export async function persistWalkthroughCompleted() {
   const db = await databasePromise;
 
@@ -410,6 +558,7 @@ export async function persistMaintenanceTask(homeId: string, input: CreateMainte
     id: `task-${Date.now()}`,
     homeId,
     roomId: input.roomId,
+    applianceId: input.applianceId,
     title: input.title.trim(),
     category: input.category.trim() || 'General',
     notes: input.notes?.trim() || undefined,
@@ -429,7 +578,7 @@ export async function persistMaintenanceTask(homeId: string, input: CreateMainte
     task.id,
     task.homeId,
     nullable(task.roomId),
-    null,
+    nullable(task.applianceId),
     task.title,
     task.category,
     nullable(task.notes),
@@ -482,6 +631,7 @@ export async function updateMaintenanceTask(taskId: string, input: CreateMainten
   await db.runAsync(
     `UPDATE maintenance_tasks
       SET roomId = ?,
+        applianceId = ?,
         title = ?,
         category = ?,
         notes = ?,
@@ -492,6 +642,7 @@ export async function updateMaintenanceTask(taskId: string, input: CreateMainten
         updatedAt = ?
       WHERE id = ?`,
     nullable(input.roomId),
+    nullable(input.applianceId),
     input.title.trim(),
     input.category.trim() || 'General',
     input.notes?.trim() || null,
@@ -502,6 +653,20 @@ export async function updateMaintenanceTask(taskId: string, input: CreateMainten
     now,
     taskId,
   );
+}
+
+export async function archiveMaintenanceTask(taskId: string) {
+  const db = await databasePromise;
+  const now = new Date().toISOString();
+
+  await db.runAsync(`UPDATE maintenance_tasks SET archivedAt = ?, updatedAt = ? WHERE id = ?`, now, now, taskId);
+}
+
+export async function rescheduleMaintenanceTask(taskId: string, nextDueAt: string) {
+  const db = await databasePromise;
+  const now = new Date().toISOString();
+
+  await db.runAsync(`UPDATE maintenance_tasks SET nextDueAt = ?, updatedAt = ? WHERE id = ?`, nextDueAt, now, taskId);
 }
 
 export async function persistAppliance(homeId: string, input: CreateApplianceInput): Promise<Appliance> {

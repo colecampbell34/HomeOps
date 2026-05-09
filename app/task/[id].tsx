@@ -9,17 +9,32 @@ import { SectionHeader } from '../../src/components/SectionHeader';
 import { SupplyFormModal } from '../../src/components/SupplyFormModal';
 import { useHomeOps } from '../../src/store/HomeOpsContext';
 import { colors, font, radii, spacing } from '../../src/theme';
-import { dueLabel, formatLongDate, recurrenceLabel } from '../../src/utils/dates';
+import { addRecurrence, dueLabel, formatLongDate, recurrenceLabel, toISODate, today } from '../../src/utils/dates';
 
 export default function TaskDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { addSupply, appliances, completeTask, completions, getApplianceName, getRoomName, rooms, supplies, tasks, updateTask } =
-    useHomeOps();
+  const {
+    addSupply,
+    appliances,
+    archiveTask,
+    completeTask,
+    completions,
+    getApplianceName,
+    getRoomName,
+    rooms,
+    supplies,
+    tasks,
+    updateTask,
+    rescheduleTask,
+  } = useHomeOps();
   const [completionNotes, setCompletionNotes] = useState('');
   const [isCompleting, setIsCompleting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isSupplyFormOpen, setIsSupplyFormOpen] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [snoozingLabel, setSnoozingLabel] = useState<string | undefined>();
 
   const task = tasks.find((candidate) => candidate.id === id);
   const taskHistory = useMemo(
@@ -43,6 +58,40 @@ export default function TaskDetailScreen() {
       setCompletionNotes('');
     } finally {
       setIsCompleting(false);
+    }
+  }
+
+  async function handleSnooze(label: string, nextDueAt: string) {
+    if (!task || snoozingLabel) {
+      return;
+    }
+
+    setSnoozingLabel(label);
+
+    try {
+      await rescheduleTask(task.id, nextDueAt);
+    } finally {
+      setSnoozingLabel(undefined);
+    }
+  }
+
+  async function handleArchive() {
+    if (!task || isArchiving) {
+      return;
+    }
+
+    if (!confirmArchive) {
+      setConfirmArchive(true);
+      return;
+    }
+
+    setIsArchiving(true);
+
+    try {
+      await archiveTask(task.id);
+      router.replace('/(tabs)/tasks');
+    } finally {
+      setIsArchiving(false);
     }
   }
 
@@ -97,6 +146,40 @@ export default function TaskDetailScreen() {
       <View style={styles.detailGrid}>
         <InfoCell label="Category" value={task.category} />
         <InfoCell label="Supplies" value={`${linkedSupplies.length} linked`} />
+      </View>
+
+      <View style={styles.sectionBlock}>
+        <Text style={styles.blockTitle}>Schedule actions</Text>
+        <View style={styles.actionRow}>
+          <Pressable
+            accessibilityRole="button"
+            disabled={!!snoozingLabel}
+            onPress={() => handleSnooze('1 week', toISODate(addRecurrence(today(), 'weekly', 1)))}
+            style={({ pressed }) => [styles.secondaryAction, pressed && styles.secondaryActionPressed]}
+          >
+            <Ionicons name="time-outline" size={17} color={colors.primary} />
+            <Text style={styles.secondaryActionText}>{snoozingLabel === '1 week' ? 'Saving' : 'Snooze 1 week'}</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            disabled={!!snoozingLabel}
+            onPress={() => handleSnooze('1 month', toISODate(addRecurrence(today(), 'monthly', 1)))}
+            style={({ pressed }) => [styles.secondaryAction, pressed && styles.secondaryActionPressed]}
+          >
+            <Ionicons name="calendar-outline" size={17} color={colors.primary} />
+            <Text style={styles.secondaryActionText}>{snoozingLabel === '1 month' ? 'Saving' : 'Snooze 1 month'}</Text>
+          </Pressable>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          onPress={handleArchive}
+          style={({ pressed }) => [styles.archiveButton, pressed && styles.archiveButtonPressed]}
+        >
+          <Ionicons name={confirmArchive ? 'alert-circle-outline' : 'archive-outline'} size={17} color={colors.red} />
+          <Text style={styles.archiveButtonText}>
+            {isArchiving ? 'Archiving' : confirmArchive ? 'Confirm archive task' : 'Archive task'}
+          </Text>
+        </Pressable>
       </View>
 
       {!!task.notes && (
@@ -176,6 +259,7 @@ export default function TaskDetailScreen() {
       <QuickAddTaskModal
         visible={isEditing}
         rooms={rooms}
+        appliances={appliances}
         initialTask={task}
         onClose={() => setIsEditing(false)}
         onSubmit={(input) => updateTask(task.id, input)}
@@ -363,6 +447,50 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: font.small,
     lineHeight: 20,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+  },
+  secondaryAction: {
+    alignItems: 'center',
+    borderColor: colors.border,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    justifyContent: 'center',
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
+  },
+  secondaryActionPressed: {
+    backgroundColor: colors.surfaceMuted,
+  },
+  secondaryActionText: {
+    color: colors.primary,
+    fontSize: font.small,
+    fontWeight: '800',
+  },
+  archiveButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderColor: '#F1C7C0',
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    justifyContent: 'center',
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
+  },
+  archiveButtonPressed: {
+    backgroundColor: colors.redSurface,
+  },
+  archiveButtonText: {
+    color: colors.red,
+    fontSize: font.small,
+    fontWeight: '800',
   },
   notesInput: {
     backgroundColor: colors.background,

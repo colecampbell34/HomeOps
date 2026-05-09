@@ -174,6 +174,7 @@ export default function RoomDetailScreen() {
       <QuickAddTaskModal
         visible={isQuickAddOpen}
         rooms={rooms}
+        appliances={roomAppliances}
         defaultRoomId={room.id}
         onClose={() => setIsQuickAddOpen(false)}
         onSubmit={addTask}

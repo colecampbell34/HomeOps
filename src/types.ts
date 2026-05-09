@@ -100,6 +100,7 @@ export type TaskStatus = 'overdue' | 'due-soon' | 'upcoming' | 'complete' | 'uns
 export type CreateMaintenanceTaskInput = {
   title: string;
   roomId?: string;
+  applianceId?: string;
   category: string;
   notes?: string;
   priority: Priority;

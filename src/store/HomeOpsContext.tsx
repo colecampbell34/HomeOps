@@ -2,7 +2,11 @@ import { PropsWithChildren, createContext, useCallback, useContext, useEffect, u
 
 import { seedHome, seedRooms } from '../data/seed';
 import {
+  archiveMaintenanceTask,
+  exportHomeOpsSnapshot,
+  HomeOpsSnapshot,
   initializeDatabase,
+  importHomeOpsSnapshot,
   loadHomeOpsSnapshot,
   persistAppliance,
   persistMaintenanceTask,
@@ -10,6 +14,8 @@ import {
   persistSupply,
   persistTaskCompletion,
   persistWalkthroughCompleted,
+  resetHomeOpsData,
+  rescheduleMaintenanceTask,
   updateAppliance,
   updateMaintenanceTask,
   updateSupply,
@@ -42,6 +48,8 @@ type HomeOpsState = {
   upcomingTasks: MaintenanceTask[];
   recentCompletions: Array<TaskCompletion & { task?: MaintenanceTask }>;
   completeTask: (taskId: string, notes?: string) => Promise<void>;
+  archiveTask: (taskId: string) => Promise<void>;
+  rescheduleTask: (taskId: string, nextDueAt: string) => Promise<void>;
   addRoom: (input: CreateRoomInput) => Promise<void>;
   addTask: (input: CreateMaintenanceTaskInput) => Promise<void>;
   updateTask: (taskId: string, input: CreateMaintenanceTaskInput) => Promise<void>;
@@ -50,6 +58,9 @@ type HomeOpsState = {
   addSupply: (input: CreateSupplyInput) => Promise<void>;
   updateSupply: (supplyId: string, input: CreateSupplyInput) => Promise<void>;
   completeWalkthrough: () => Promise<void>;
+  exportData: () => Promise<HomeOpsSnapshot>;
+  importData: (snapshot: HomeOpsSnapshot) => Promise<void>;
+  resetData: () => Promise<void>;
   getRoomName: (roomId?: string) => string;
   getApplianceName: (applianceId?: string) => string;
   getTaskTitle: (taskId?: string) => string;
@@ -142,6 +153,22 @@ export function HomeOpsProvider({ children }: PropsWithChildren) {
     [home.id, refreshSnapshot],
   );
 
+  const archiveTask = useCallback(
+    async (taskId: string) => {
+      await archiveMaintenanceTask(taskId);
+      await refreshSnapshot();
+    },
+    [refreshSnapshot],
+  );
+
+  const rescheduleTask = useCallback(
+    async (taskId: string, nextDueAt: string) => {
+      await rescheduleMaintenanceTask(taskId, nextDueAt);
+      await refreshSnapshot();
+    },
+    [refreshSnapshot],
+  );
+
   const addRoom = useCallback(
     async (input: CreateRoomInput) => {
       await persistRoom(home.id, input);
@@ -195,6 +222,21 @@ export function HomeOpsProvider({ children }: PropsWithChildren) {
     setHasCompletedWalkthrough(true);
   }, []);
 
+  const exportData = useCallback(async () => exportHomeOpsSnapshot(), []);
+
+  const importData = useCallback(
+    async (snapshot: HomeOpsSnapshot) => {
+      await importHomeOpsSnapshot(snapshot);
+      await refreshSnapshot();
+    },
+    [refreshSnapshot],
+  );
+
+  const resetData = useCallback(async () => {
+    await resetHomeOpsData();
+    await refreshSnapshot();
+  }, [refreshSnapshot]);
+
   const value = useMemo<HomeOpsState>(() => {
     const activeTasks = tasks.filter((task) => !task.archivedAt);
     const overdueTasks = activeTasks.filter((task) => getTaskStatus(task) === 'overdue').sort(compareDueDate);
@@ -227,6 +269,8 @@ export function HomeOpsProvider({ children }: PropsWithChildren) {
       upcomingTasks,
       recentCompletions,
       completeTask,
+      archiveTask,
+      rescheduleTask,
       addRoom,
       addTask,
       updateTask,
@@ -235,6 +279,9 @@ export function HomeOpsProvider({ children }: PropsWithChildren) {
       addSupply,
       updateSupply: saveSupply,
       completeWalkthrough,
+      exportData,
+      importData,
+      resetData,
       getRoomName: (roomId?: string) => rooms.find((room) => room.id === roomId)?.name ?? 'Whole home',
       getApplianceName: (applianceId?: string) =>
         appliances.find((appliance) => appliance.id === applianceId)?.name ?? 'No appliance linked',
@@ -245,14 +292,19 @@ export function HomeOpsProvider({ children }: PropsWithChildren) {
     addRoom,
     addSupply,
     addTask,
+    archiveTask,
     appliances,
     completeTask,
     completeWalkthrough,
     completions,
     error,
+    exportData,
     hasCompletedWalkthrough,
     home,
+    importData,
     isReady,
+    rescheduleTask,
+    resetData,
     rooms,
     saveAppliance,
     saveSupply,

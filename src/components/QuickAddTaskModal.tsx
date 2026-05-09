@@ -13,12 +13,13 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, font, radii, spacing } from '../theme';
-import { CreateMaintenanceTaskInput, MaintenanceTask, Priority, RecurrenceType, Room } from '../types';
+import { Appliance, CreateMaintenanceTaskInput, MaintenanceTask, Priority, RecurrenceType, Room } from '../types';
 import { addRecurrence, toISODate, today } from '../utils/dates';
 
 type QuickAddTaskModalProps = {
   visible: boolean;
   rooms: Room[];
+  appliances?: Appliance[];
   initialTask?: MaintenanceTask;
   defaultRoomId?: string;
   onClose: () => void;
@@ -40,6 +41,18 @@ const recurrenceOptions: Array<{ label: string; recurrenceType: RecurrenceType; 
   { label: '3 months', recurrenceType: 'quarterly', recurrenceInterval: 1 },
   { label: '6 months', recurrenceType: 'semiannual', recurrenceInterval: 1 },
   { label: 'Yearly', recurrenceType: 'yearly', recurrenceInterval: 1 },
+  { label: 'Custom', recurrenceType: 'custom', recurrenceInterval: 1 },
+];
+
+type CustomRecurrenceUnit = 'days' | 'weeks' | 'months' | 'years';
+
+const customRecurrenceIndex = recurrenceOptions.length - 1;
+
+const customUnitOptions: Array<{ label: string; unit: CustomRecurrenceUnit; recurrenceType: RecurrenceType }> = [
+  { label: 'Days', unit: 'days', recurrenceType: 'custom' },
+  { label: 'Weeks', unit: 'weeks', recurrenceType: 'weekly' },
+  { label: 'Months', unit: 'months', recurrenceType: 'monthly' },
+  { label: 'Years', unit: 'years', recurrenceType: 'yearly' },
 ];
 
 function buildDuePresets(initialTask?: MaintenanceTask): DuePreset[] {
@@ -56,19 +69,59 @@ function buildDuePresets(initialTask?: MaintenanceTask): DuePreset[] {
   return presets;
 }
 
-export function QuickAddTaskModal({ visible, rooms, initialTask, defaultRoomId, onClose, onSubmit }: QuickAddTaskModalProps) {
+function unitFromRecurrenceType(recurrenceType: RecurrenceType): CustomRecurrenceUnit {
+  if (recurrenceType === 'weekly') {
+    return 'weeks';
+  }
+
+  if (recurrenceType === 'monthly' || recurrenceType === 'quarterly' || recurrenceType === 'semiannual') {
+    return 'months';
+  }
+
+  if (recurrenceType === 'yearly') {
+    return 'years';
+  }
+
+  return 'days';
+}
+
+function customIntervalFromTask(task: MaintenanceTask): string {
+  if (task.recurrenceType === 'quarterly') {
+    return String(task.recurrenceInterval * 3);
+  }
+
+  if (task.recurrenceType === 'semiannual') {
+    return String(task.recurrenceInterval * 6);
+  }
+
+  return String(task.recurrenceInterval);
+}
+
+export function QuickAddTaskModal({
+  visible,
+  rooms,
+  appliances = [],
+  initialTask,
+  defaultRoomId,
+  onClose,
+  onSubmit,
+}: QuickAddTaskModalProps) {
   const duePresets = useMemo(() => buildDuePresets(initialTask), [initialTask, visible]);
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('General');
   const [notes, setNotes] = useState('');
   const [roomId, setRoomId] = useState<string | undefined>();
+  const [applianceId, setApplianceId] = useState<string | undefined>();
   const [priority, setPriority] = useState<Priority>('medium');
   const [recurrenceIndex, setRecurrenceIndex] = useState(1);
+  const [customInterval, setCustomInterval] = useState('14');
+  const [customUnit, setCustomUnit] = useState<CustomRecurrenceUnit>('days');
   const [duePresetIndex, setDuePresetIndex] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
 
   const canSave = title.trim().length > 0 && !isSaving;
   const isEditing = !!initialTask;
+  const isCustomRecurrence = recurrenceIndex === customRecurrenceIndex;
 
   useEffect(() => {
     if (!visible) {
@@ -86,13 +139,25 @@ export function QuickAddTaskModal({ visible, rooms, initialTask, defaultRoomId, 
       setCategory(initialTask.category);
       setNotes(initialTask.notes ?? '');
       setRoomId(initialTask.roomId);
+      setApplianceId(initialTask.applianceId);
       setPriority(initialTask.priority);
-      setRecurrenceIndex(recurrenceMatch >= 0 ? recurrenceMatch : 1);
+      setRecurrenceIndex(recurrenceMatch >= 0 ? recurrenceMatch : customRecurrenceIndex);
+      setCustomInterval(customIntervalFromTask(initialTask));
+      setCustomUnit(unitFromRecurrenceType(initialTask.recurrenceType));
       setDuePresetIndex(0);
       return;
     }
 
+    setTitle('');
+    setCategory('General');
+    setNotes('');
     setRoomId(defaultRoomId);
+    setApplianceId(undefined);
+    setPriority('medium');
+    setRecurrenceIndex(1);
+    setCustomInterval('14');
+    setCustomUnit('days');
+    setDuePresetIndex(0);
   }, [defaultRoomId, initialTask, visible]);
 
   function resetForm() {
@@ -100,8 +165,11 @@ export function QuickAddTaskModal({ visible, rooms, initialTask, defaultRoomId, 
     setCategory('General');
     setNotes('');
     setRoomId(defaultRoomId);
+    setApplianceId(undefined);
     setPriority('medium');
     setRecurrenceIndex(1);
+    setCustomInterval('14');
+    setCustomUnit('days');
     setDuePresetIndex(0);
   }
 
@@ -115,15 +183,19 @@ export function QuickAddTaskModal({ visible, rooms, initialTask, defaultRoomId, 
     try {
       const recurrence = recurrenceOptions[recurrenceIndex];
       const duePreset = duePresets[duePresetIndex];
+      const normalizedCustomInterval = Math.max(1, Number.parseInt(customInterval, 10) || 1);
+      const customRecurrenceType =
+        customUnitOptions.find((option) => option.unit === customUnit)?.recurrenceType ?? 'custom';
 
       await onSubmit({
         title,
         roomId,
+        applianceId,
         category,
         notes,
         priority,
-        recurrenceType: recurrence.recurrenceType,
-        recurrenceInterval: recurrence.recurrenceInterval,
+        recurrenceType: isCustomRecurrence ? customRecurrenceType : recurrence.recurrenceType,
+        recurrenceInterval: isCustomRecurrence ? normalizedCustomInterval : recurrence.recurrenceInterval,
         nextDueAt: toISODate(duePreset.dueDate),
       });
 
@@ -163,12 +235,54 @@ export function QuickAddTaskModal({ visible, rooms, initialTask, defaultRoomId, 
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Room</Text>
             <View style={styles.chips}>
-              <ChoiceChip label="Whole home" selected={!roomId} onPress={() => setRoomId(undefined)} />
+              <ChoiceChip
+                label="Whole home"
+                selected={!roomId}
+                onPress={() => {
+                  setRoomId(undefined);
+                  setApplianceId(undefined);
+                }}
+              />
               {rooms.map((room) => (
-                <ChoiceChip key={room.id} label={room.name} selected={roomId === room.id} onPress={() => setRoomId(room.id)} />
+                <ChoiceChip
+                  key={room.id}
+                  label={room.name}
+                  selected={roomId === room.id}
+                  onPress={() => {
+                    setRoomId(room.id);
+                    const selectedAppliance = appliances.find((appliance) => appliance.id === applianceId);
+
+                    if (selectedAppliance?.roomId && selectedAppliance.roomId !== room.id) {
+                      setApplianceId(undefined);
+                    }
+                  }}
+                />
               ))}
             </View>
           </View>
+
+          {appliances.length > 0 && (
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Linked appliance</Text>
+              <View style={styles.chips}>
+                <ChoiceChip label="None" selected={!applianceId} onPress={() => setApplianceId(undefined)} />
+                {appliances.map((appliance) => (
+                  <ChoiceChip
+                    key={appliance.id}
+                    label={appliance.name}
+                    selected={applianceId === appliance.id}
+                    onPress={() => {
+                      setApplianceId(appliance.id);
+
+                      if (appliance.roomId) {
+                        setRoomId(appliance.roomId);
+                      }
+                    }}
+                  />
+                ))}
+              </View>
+            </View>
+          )}
 
           <View style={styles.twoColumn}>
             <View style={styles.fieldGroupHalf}>
@@ -198,6 +312,33 @@ export function QuickAddTaskModal({ visible, rooms, initialTask, defaultRoomId, 
               ))}
             </View>
           </View>
+
+          {isCustomRecurrence && (
+            <View style={styles.customRecurrenceRow}>
+              <View style={styles.customIntervalField}>
+                <Text style={styles.label}>Every</Text>
+                <TextInput
+                  keyboardType="number-pad"
+                  onChangeText={setCustomInterval}
+                  style={styles.input}
+                  value={customInterval}
+                />
+              </View>
+              <View style={styles.customUnitField}>
+                <Text style={styles.label}>Unit</Text>
+                <View style={styles.segmented}>
+                  {customUnitOptions.map((option) => (
+                    <SegmentButton
+                      key={option.unit}
+                      label={option.label}
+                      selected={customUnit === option.unit}
+                      onPress={() => setCustomUnit(option.unit)}
+                    />
+                  ))}
+                </View>
+              </View>
+            </View>
+          )}
 
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Next due</Text>
@@ -252,7 +393,9 @@ function ChoiceChip({ label, selected, onPress }: { label: string; selected: boo
       onPress={onPress}
       style={[styles.chip, selected && styles.chipSelected]}
     >
-      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
+      <Text style={[styles.chipText, selected && styles.chipTextSelected]} numberOfLines={2}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -340,6 +483,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radii.sm,
     borderWidth: 1,
+    maxWidth: '100%',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
@@ -358,6 +502,19 @@ const styles = StyleSheet.create({
   twoColumn: {
     flexDirection: 'row',
     gap: spacing.md,
+  },
+  customRecurrenceRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  customIntervalField: {
+    gap: spacing.sm,
+    width: 94,
+  },
+  customUnitField: {
+    flex: 1,
+    gap: spacing.sm,
+    minWidth: 0,
   },
   segmented: {
     backgroundColor: colors.surfaceMuted,

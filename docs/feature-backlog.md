@@ -2,13 +2,24 @@
 
 This list tracks meaningful features and polish that are not yet implemented. It is intentionally broader than the current web-first MVP.
 
+## Added in v2
+
+- Web JSON export and import for local HomeOps data.
+- Reset local data option for testing and fresh starts.
+- Task search across title, notes, category, room, and linked appliance.
+- Task filters for priority and category.
+- Full custom interval support in the task form for day, week, month, and year schedules.
+- Link a task to an appliance during task creation/editing.
+- Snooze task actions for one week or one month.
+- Archive task action that removes tasks from active lists while keeping history.
+
 ## User Accounts, Sync, and Data Ownership
 
 - User authentication for web and future native accounts.
 - Cloud backup and sync across browsers/devices.
 - Household sharing with roles or invites.
 - Multiple homes/properties.
-- Import/export of local data.
+- Hosted/cloud backup beyond local JSON files.
 - Account deletion and data deletion flows.
 - Data migration strategy from local-only web storage to authenticated cloud storage.
 
@@ -34,15 +45,11 @@ This list tracks meaningful features and polish that are not yet implemented. It
 
 ## Maintenance Tasks
 
-- Full custom interval support in the task form.
-- Link a task to an appliance during task creation/editing.
 - Add/edit task photo.
 - Add explicit supply/part info directly on a task.
 - Completion flow with optional notes/photo before saving.
-- Snooze/reschedule task.
-- Archive/delete task.
-- Task search.
-- More complete filters, including priority/category.
+- Arbitrary reschedule date picker beyond quick snooze actions.
+- Delete task flow with confirmation, if needed after archive.
 - Calendar-style view.
 
 ## Reminders and Notifications
@@ -115,5 +122,4 @@ This list tracks meaningful features and polish that are not yet implemented. It
 - Tablet and desktop web layout QA.
 - Accessibility labels and focus order review.
 - Loading/error states for all forms.
-- Reset local data option for testing.
 - About, support, and privacy content finalized.

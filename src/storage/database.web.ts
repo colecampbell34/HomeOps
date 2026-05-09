@@ -36,6 +36,32 @@ function createInitialState(): HomeOpsSnapshot {
   };
 }
 
+function cloneSnapshot(snapshot: HomeOpsSnapshot): HomeOpsSnapshot {
+  return {
+    home: { ...snapshot.home },
+    rooms: snapshot.rooms.map((room) => ({ ...room })),
+    tasks: snapshot.tasks.map((task) => ({ ...task })),
+    completions: snapshot.completions.map((completion) => ({ ...completion })),
+    appliances: snapshot.appliances.map((appliance) => ({ ...appliance })),
+    supplies: snapshot.supplies.map((supply) => ({ ...supply })),
+    hasCompletedWalkthrough: snapshot.hasCompletedWalkthrough,
+  };
+}
+
+function normalizeSnapshot(snapshot: HomeOpsSnapshot): HomeOpsSnapshot {
+  const initialState = createInitialState();
+
+  return {
+    home: snapshot.home ?? initialState.home,
+    rooms: Array.isArray(snapshot.rooms) ? snapshot.rooms : initialState.rooms,
+    tasks: Array.isArray(snapshot.tasks) ? snapshot.tasks : initialState.tasks,
+    completions: Array.isArray(snapshot.completions) ? snapshot.completions : initialState.completions,
+    appliances: Array.isArray(snapshot.appliances) ? snapshot.appliances : initialState.appliances,
+    supplies: Array.isArray(snapshot.supplies) ? snapshot.supplies : initialState.supplies,
+    hasCompletedWalkthrough: Boolean(snapshot.hasCompletedWalkthrough),
+  };
+}
+
 function getStorage() {
   if (typeof window === 'undefined') {
     return undefined;
@@ -92,6 +118,18 @@ export async function loadHomeOpsSnapshot(): Promise<HomeOpsSnapshot> {
   return loadState();
 }
 
+export async function exportHomeOpsSnapshot(): Promise<HomeOpsSnapshot> {
+  return cloneSnapshot(loadState());
+}
+
+export async function importHomeOpsSnapshot(snapshot: HomeOpsSnapshot) {
+  saveState(normalizeSnapshot(snapshot));
+}
+
+export async function resetHomeOpsData() {
+  saveState(createInitialState());
+}
+
 export async function persistWalkthroughCompleted() {
   updateState((snapshot) => ({
     ...snapshot,
@@ -129,6 +167,7 @@ export async function persistMaintenanceTask(homeId: string, input: CreateMainte
     id: `task-${Date.now()}`,
     homeId,
     roomId: input.roomId,
+    applianceId: input.applianceId,
     title: input.title.trim(),
     category: input.category.trim() || 'General',
     notes: input.notes?.trim() || undefined,
@@ -178,6 +217,7 @@ export async function updateMaintenanceTask(taskId: string, input: CreateMainten
         ? {
             ...task,
             roomId: input.roomId,
+            applianceId: input.applianceId,
             title: input.title.trim(),
             category: input.category.trim() || 'General',
             notes: input.notes?.trim() || undefined,
@@ -185,6 +225,40 @@ export async function updateMaintenanceTask(taskId: string, input: CreateMainten
             recurrenceType: input.recurrenceType,
             recurrenceInterval: input.recurrenceInterval,
             nextDueAt: input.nextDueAt,
+            updatedAt: now,
+          }
+        : task,
+    ),
+  }));
+}
+
+export async function archiveMaintenanceTask(taskId: string) {
+  const now = new Date().toISOString();
+
+  updateState((snapshot) => ({
+    ...snapshot,
+    tasks: snapshot.tasks.map((task) =>
+      task.id === taskId
+        ? {
+            ...task,
+            archivedAt: now,
+            updatedAt: now,
+          }
+        : task,
+    ),
+  }));
+}
+
+export async function rescheduleMaintenanceTask(taskId: string, nextDueAt: string) {
+  const now = new Date().toISOString();
+
+  updateState((snapshot) => ({
+    ...snapshot,
+    tasks: snapshot.tasks.map((task) =>
+      task.id === taskId
+        ? {
+            ...task,
+            nextDueAt,
             updatedAt: now,
           }
         : task,
