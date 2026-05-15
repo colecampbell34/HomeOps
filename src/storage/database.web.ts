@@ -195,6 +195,7 @@ export async function persistRoom(homeId: string, input: CreateRoomInput): Promi
     name: input.name.trim(),
     type: input.type,
     icon: input.icon,
+    notes: input.notes?.trim() || undefined,
     createdAt: now,
     updatedAt: now,
   };
@@ -205,6 +206,45 @@ export async function persistRoom(homeId: string, input: CreateRoomInput): Promi
   }));
 
   return room;
+}
+
+export async function updateRoom(roomId: string, input: CreateRoomInput) {
+  const now = new Date().toISOString();
+
+  updateState((snapshot) => ({
+    ...snapshot,
+    rooms: snapshot.rooms
+      .map((room) =>
+        room.id === roomId
+          ? {
+              ...room,
+              name: input.name.trim(),
+              type: input.type,
+              icon: input.icon,
+              notes: input.notes?.trim() || undefined,
+              updatedAt: now,
+            }
+          : room,
+      )
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  }));
+}
+
+export async function archiveRoom(roomId: string) {
+  const now = new Date().toISOString();
+
+  updateState((snapshot) => ({
+    ...snapshot,
+    rooms: snapshot.rooms.map((room) =>
+      room.id === roomId
+        ? {
+            ...room,
+            archivedAt: now,
+            updatedAt: now,
+          }
+        : room,
+    ),
+  }));
 }
 
 export async function updateMaintenanceTask(taskId: string, input: CreateMaintenanceTaskInput) {
@@ -277,6 +317,9 @@ export async function persistAppliance(homeId: string, input: CreateApplianceInp
     modelNumber: input.modelNumber?.trim() || undefined,
     serialNumber: input.serialNumber?.trim() || undefined,
     purchaseDate: input.purchaseDate?.trim() || undefined,
+    purchaseVendor: input.purchaseVendor?.trim() || undefined,
+    warrantyExpiresAt: input.warrantyExpiresAt?.trim() || undefined,
+    receiptUrl: input.receiptUrl?.trim() || undefined,
     manualUrl: input.manualUrl?.trim() || undefined,
     notes: input.notes?.trim() || undefined,
     createdAt: now,
@@ -307,6 +350,9 @@ export async function updateAppliance(applianceId: string, input: CreateApplianc
               modelNumber: input.modelNumber?.trim() || undefined,
               serialNumber: input.serialNumber?.trim() || undefined,
               purchaseDate: input.purchaseDate?.trim() || undefined,
+              purchaseVendor: input.purchaseVendor?.trim() || undefined,
+              warrantyExpiresAt: input.warrantyExpiresAt?.trim() || undefined,
+              receiptUrl: input.receiptUrl?.trim() || undefined,
               manualUrl: input.manualUrl?.trim() || undefined,
               notes: input.notes?.trim() || undefined,
               updatedAt: now,
@@ -317,11 +363,29 @@ export async function updateAppliance(applianceId: string, input: CreateApplianc
   }));
 }
 
+export async function archiveAppliance(applianceId: string) {
+  const now = new Date().toISOString();
+
+  updateState((snapshot) => ({
+    ...snapshot,
+    appliances: snapshot.appliances.map((appliance) =>
+      appliance.id === applianceId
+        ? {
+            ...appliance,
+            archivedAt: now,
+            updatedAt: now,
+          }
+        : appliance,
+    ),
+  }));
+}
+
 export async function persistSupply(homeId: string, input: CreateSupplyInput): Promise<Supply> {
   const now = new Date().toISOString();
   const supply: Supply = {
     id: `supply-${Date.now()}`,
     homeId,
+    roomId: input.roomId,
     applianceId: input.applianceId,
     taskId: input.taskId,
     name: input.name.trim(),
@@ -330,6 +394,10 @@ export async function persistSupply(homeId: string, input: CreateSupplyInput): P
     brand: input.brand?.trim() || undefined,
     notes: input.notes?.trim() || undefined,
     lastPurchasedAt: input.lastPurchasedAt?.trim() || undefined,
+    lastPurchasedVendor: input.lastPurchasedVendor?.trim() || undefined,
+    reorderUrl: input.reorderUrl?.trim() || undefined,
+    quantityOnHand: input.quantityOnHand,
+    lowStockThreshold: input.lowStockThreshold,
     createdAt: now,
     updatedAt: now,
   };
@@ -352,6 +420,7 @@ export async function updateSupply(supplyId: string, input: CreateSupplyInput) {
         supply.id === supplyId
           ? {
               ...supply,
+              roomId: input.roomId,
               applianceId: input.applianceId,
               taskId: input.taskId,
               name: input.name.trim(),
@@ -360,10 +429,31 @@ export async function updateSupply(supplyId: string, input: CreateSupplyInput) {
               brand: input.brand?.trim() || undefined,
               notes: input.notes?.trim() || undefined,
               lastPurchasedAt: input.lastPurchasedAt?.trim() || undefined,
+              lastPurchasedVendor: input.lastPurchasedVendor?.trim() || undefined,
+              reorderUrl: input.reorderUrl?.trim() || undefined,
+              quantityOnHand: input.quantityOnHand,
+              lowStockThreshold: input.lowStockThreshold,
               updatedAt: now,
             }
           : supply,
       )
       .sort((a, b) => a.name.localeCompare(b.name)),
+  }));
+}
+
+export async function archiveSupply(supplyId: string) {
+  const now = new Date().toISOString();
+
+  updateState((snapshot) => ({
+    ...snapshot,
+    supplies: snapshot.supplies.map((supply) =>
+      supply.id === supplyId
+        ? {
+            ...supply,
+            archivedAt: now,
+            updatedAt: now,
+          }
+        : supply,
+    ),
   }));
 }

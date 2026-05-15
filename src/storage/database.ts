@@ -35,23 +35,58 @@ type PersistedCompletionRow = Omit<TaskCompletion, 'notes' | 'photoUri'> & {
 
 type PersistedApplianceRow = Omit<
   Appliance,
-  'roomId' | 'brand' | 'modelNumber' | 'serialNumber' | 'purchaseDate' | 'manualUri' | 'manualUrl' | 'photoUri' | 'notes'
+  | 'roomId'
+  | 'brand'
+  | 'modelNumber'
+  | 'serialNumber'
+  | 'purchaseDate'
+  | 'purchaseVendor'
+  | 'warrantyExpiresAt'
+  | 'receiptUrl'
+  | 'manualUri'
+  | 'manualUrl'
+  | 'photoUri'
+  | 'notes'
+  | 'archivedAt'
 > & {
   roomId: string | null;
   brand: string | null;
   modelNumber: string | null;
   serialNumber: string | null;
   purchaseDate: string | null;
+  purchaseVendor: string | null;
+  warrantyExpiresAt: string | null;
+  receiptUrl: string | null;
   manualUri: string | null;
   manualUrl: string | null;
   photoUri: string | null;
   notes: string | null;
+  archivedAt: string | null;
+};
+
+type PersistedRoomRow = Omit<Room, 'notes' | 'photoUri' | 'archivedAt'> & {
+  notes: string | null;
+  photoUri: string | null;
+  archivedAt: string | null;
 };
 
 type PersistedSupplyRow = Omit<
   Supply,
-  'applianceId' | 'taskId' | 'sizeOrModel' | 'brand' | 'notes' | 'photoUri' | 'lastPurchasedAt'
+  | 'roomId'
+  | 'applianceId'
+  | 'taskId'
+  | 'sizeOrModel'
+  | 'brand'
+  | 'notes'
+  | 'photoUri'
+  | 'lastPurchasedAt'
+  | 'lastPurchasedVendor'
+  | 'reorderUrl'
+  | 'quantityOnHand'
+  | 'lowStockThreshold'
+  | 'archivedAt'
 > & {
+  roomId: string | null;
   applianceId: string | null;
   taskId: string | null;
   sizeOrModel: string | null;
@@ -59,6 +94,11 @@ type PersistedSupplyRow = Omit<
   notes: string | null;
   photoUri: string | null;
   lastPurchasedAt: string | null;
+  lastPurchasedVendor: string | null;
+  reorderUrl: string | null;
+  quantityOnHand: number | null;
+  lowStockThreshold: number | null;
+  archivedAt: string | null;
 };
 
 const databasePromise = SQLite.openDatabaseAsync('homeops.db');
@@ -89,6 +129,15 @@ function fromCompletionRow(row: PersistedCompletionRow): TaskCompletion {
   };
 }
 
+function fromRoomRow(row: PersistedRoomRow): Room {
+  return {
+    ...row,
+    notes: row.notes ?? undefined,
+    photoUri: row.photoUri ?? undefined,
+    archivedAt: row.archivedAt ?? undefined,
+  };
+}
+
 function fromApplianceRow(row: PersistedApplianceRow): Appliance {
   return {
     ...row,
@@ -97,16 +146,21 @@ function fromApplianceRow(row: PersistedApplianceRow): Appliance {
     modelNumber: row.modelNumber ?? undefined,
     serialNumber: row.serialNumber ?? undefined,
     purchaseDate: row.purchaseDate ?? undefined,
+    purchaseVendor: row.purchaseVendor ?? undefined,
+    warrantyExpiresAt: row.warrantyExpiresAt ?? undefined,
+    receiptUrl: row.receiptUrl ?? undefined,
     manualUri: row.manualUri ?? undefined,
     manualUrl: row.manualUrl ?? undefined,
     photoUri: row.photoUri ?? undefined,
     notes: row.notes ?? undefined,
+    archivedAt: row.archivedAt ?? undefined,
   };
 }
 
 function fromSupplyRow(row: PersistedSupplyRow): Supply {
   return {
     ...row,
+    roomId: row.roomId ?? undefined,
     applianceId: row.applianceId ?? undefined,
     taskId: row.taskId ?? undefined,
     sizeOrModel: row.sizeOrModel ?? undefined,
@@ -114,6 +168,11 @@ function fromSupplyRow(row: PersistedSupplyRow): Supply {
     notes: row.notes ?? undefined,
     photoUri: row.photoUri ?? undefined,
     lastPurchasedAt: row.lastPurchasedAt ?? undefined,
+    lastPurchasedVendor: row.lastPurchasedVendor ?? undefined,
+    reorderUrl: row.reorderUrl ?? undefined,
+    quantityOnHand: row.quantityOnHand ?? undefined,
+    lowStockThreshold: row.lowStockThreshold ?? undefined,
+    archivedAt: row.archivedAt ?? undefined,
   };
 }
 
@@ -147,8 +206,11 @@ export async function initializeDatabase() {
       name TEXT NOT NULL,
       type TEXT NOT NULL,
       icon TEXT NOT NULL,
+      notes TEXT,
+      photoUri TEXT,
       createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
+      updatedAt TEXT NOT NULL,
+      archivedAt TEXT
     );
 
     CREATE TABLE IF NOT EXISTS maintenance_tasks (
@@ -188,17 +250,22 @@ export async function initializeDatabase() {
       modelNumber TEXT,
       serialNumber TEXT,
       purchaseDate TEXT,
+      purchaseVendor TEXT,
+      warrantyExpiresAt TEXT,
+      receiptUrl TEXT,
       manualUri TEXT,
       manualUrl TEXT,
       photoUri TEXT,
       notes TEXT,
       createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
+      updatedAt TEXT NOT NULL,
+      archivedAt TEXT
     );
 
     CREATE TABLE IF NOT EXISTS supplies (
       id TEXT PRIMARY KEY NOT NULL,
       homeId TEXT NOT NULL,
+      roomId TEXT,
       applianceId TEXT,
       taskId TEXT,
       name TEXT NOT NULL,
@@ -208,8 +275,13 @@ export async function initializeDatabase() {
       notes TEXT,
       photoUri TEXT,
       lastPurchasedAt TEXT,
+      lastPurchasedVendor TEXT,
+      reorderUrl TEXT,
+      quantityOnHand REAL,
+      lowStockThreshold REAL,
       createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
+      updatedAt TEXT NOT NULL,
+      archivedAt TEXT
     );
 
     CREATE TABLE IF NOT EXISTS app_meta (
@@ -218,7 +290,62 @@ export async function initializeDatabase() {
     );
   `);
 
+  await ensureRoomColumns(db);
+  await ensureApplianceColumns(db);
+  await ensureSupplyColumns(db);
   await seedDatabase(db);
+}
+
+async function ensureApplianceColumns(db: SQLite.SQLiteDatabase) {
+  const columns = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(appliances)`);
+  const existingColumns = new Set(columns.map((column) => column.name));
+  const requiredColumns: Array<{ name: string; sql: string }> = [
+    { name: 'purchaseVendor', sql: 'ALTER TABLE appliances ADD COLUMN purchaseVendor TEXT' },
+    { name: 'warrantyExpiresAt', sql: 'ALTER TABLE appliances ADD COLUMN warrantyExpiresAt TEXT' },
+    { name: 'receiptUrl', sql: 'ALTER TABLE appliances ADD COLUMN receiptUrl TEXT' },
+    { name: 'archivedAt', sql: 'ALTER TABLE appliances ADD COLUMN archivedAt TEXT' },
+  ];
+
+  for (const column of requiredColumns) {
+    if (!existingColumns.has(column.name)) {
+      await db.execAsync(column.sql);
+    }
+  }
+}
+
+async function ensureRoomColumns(db: SQLite.SQLiteDatabase) {
+  const columns = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(rooms)`);
+  const existingColumns = new Set(columns.map((column) => column.name));
+  const requiredColumns: Array<{ name: string; sql: string }> = [
+    { name: 'notes', sql: 'ALTER TABLE rooms ADD COLUMN notes TEXT' },
+    { name: 'photoUri', sql: 'ALTER TABLE rooms ADD COLUMN photoUri TEXT' },
+    { name: 'archivedAt', sql: 'ALTER TABLE rooms ADD COLUMN archivedAt TEXT' },
+  ];
+
+  for (const column of requiredColumns) {
+    if (!existingColumns.has(column.name)) {
+      await db.execAsync(column.sql);
+    }
+  }
+}
+
+async function ensureSupplyColumns(db: SQLite.SQLiteDatabase) {
+  const columns = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(supplies)`);
+  const existingColumns = new Set(columns.map((column) => column.name));
+  const requiredColumns: Array<{ name: string; sql: string }> = [
+    { name: 'roomId', sql: 'ALTER TABLE supplies ADD COLUMN roomId TEXT' },
+    { name: 'lastPurchasedVendor', sql: 'ALTER TABLE supplies ADD COLUMN lastPurchasedVendor TEXT' },
+    { name: 'reorderUrl', sql: 'ALTER TABLE supplies ADD COLUMN reorderUrl TEXT' },
+    { name: 'quantityOnHand', sql: 'ALTER TABLE supplies ADD COLUMN quantityOnHand REAL' },
+    { name: 'lowStockThreshold', sql: 'ALTER TABLE supplies ADD COLUMN lowStockThreshold REAL' },
+    { name: 'archivedAt', sql: 'ALTER TABLE supplies ADD COLUMN archivedAt TEXT' },
+  ];
+
+  for (const column of requiredColumns) {
+    if (!existingColumns.has(column.name)) {
+      await db.execAsync(column.sql);
+    }
+  }
 }
 
 async function seedDatabase(db: SQLite.SQLiteDatabase) {
@@ -233,14 +360,18 @@ async function seedDatabase(db: SQLite.SQLiteDatabase) {
 
   for (const room of seedRooms) {
     await db.runAsync(
-      `INSERT OR IGNORE INTO rooms (id, homeId, name, type, icon, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR IGNORE INTO rooms (id, homeId, name, type, icon, notes, photoUri, createdAt, updatedAt, archivedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       room.id,
       room.homeId,
       room.name,
       room.type,
       room.icon,
+      nullable(room.notes),
+      nullable(room.photoUri),
       room.createdAt,
       room.updatedAt,
+      nullable(room.archivedAt),
     );
   }
 
@@ -285,8 +416,9 @@ async function seedDatabase(db: SQLite.SQLiteDatabase) {
     await db.runAsync(
       `INSERT OR IGNORE INTO appliances (
         id, homeId, roomId, name, brand, modelNumber, serialNumber, purchaseDate,
-        manualUri, manualUrl, photoUri, notes, createdAt, updatedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        purchaseVendor, warrantyExpiresAt, receiptUrl, manualUri, manualUrl, photoUri,
+        notes, createdAt, updatedAt, archivedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       appliance.id,
       appliance.homeId,
       nullable(appliance.roomId),
@@ -295,23 +427,29 @@ async function seedDatabase(db: SQLite.SQLiteDatabase) {
       nullable(appliance.modelNumber),
       nullable(appliance.serialNumber),
       nullable(appliance.purchaseDate),
+      nullable(appliance.purchaseVendor),
+      nullable(appliance.warrantyExpiresAt),
+      nullable(appliance.receiptUrl),
       nullable(appliance.manualUri),
       nullable(appliance.manualUrl),
       nullable(appliance.photoUri),
       nullable(appliance.notes),
       appliance.createdAt,
       appliance.updatedAt,
+      nullable(appliance.archivedAt),
     );
   }
 
   for (const supply of seedSupplies) {
     await db.runAsync(
       `INSERT OR IGNORE INTO supplies (
-        id, homeId, applianceId, taskId, name, type, sizeOrModel, brand,
-        notes, photoUri, lastPurchasedAt, createdAt, updatedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        id, homeId, roomId, applianceId, taskId, name, type, sizeOrModel, brand,
+        notes, photoUri, lastPurchasedAt, lastPurchasedVendor, reorderUrl, quantityOnHand,
+        lowStockThreshold, createdAt, updatedAt, archivedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       supply.id,
       supply.homeId,
+      nullable(supply.roomId),
       nullable(supply.applianceId),
       nullable(supply.taskId),
       supply.name,
@@ -321,8 +459,13 @@ async function seedDatabase(db: SQLite.SQLiteDatabase) {
       nullable(supply.notes),
       nullable(supply.photoUri),
       nullable(supply.lastPurchasedAt),
+      nullable(supply.lastPurchasedVendor),
+      nullable(supply.reorderUrl),
+      supply.quantityOnHand ?? null,
+      supply.lowStockThreshold ?? null,
       supply.createdAt,
       supply.updatedAt,
+      nullable(supply.archivedAt),
     );
   }
 
@@ -346,7 +489,7 @@ async function seedDatabase(db: SQLite.SQLiteDatabase) {
 export async function loadHomeOpsSnapshot(): Promise<HomeOpsSnapshot> {
   const db = await databasePromise;
   const home = await db.getFirstAsync<Home>(`SELECT * FROM homes LIMIT 1`);
-  const rooms = await db.getAllAsync<Room>(`SELECT * FROM rooms ORDER BY name ASC`);
+  const roomRows = await db.getAllAsync<PersistedRoomRow>(`SELECT * FROM rooms ORDER BY name ASC`);
   const taskRows = await db.getAllAsync<PersistedTaskRow>(`SELECT * FROM maintenance_tasks ORDER BY nextDueAt ASC`);
   const completionRows = await db.getAllAsync<PersistedCompletionRow>(
     `SELECT * FROM task_completions ORDER BY completedAt DESC`,
@@ -360,7 +503,7 @@ export async function loadHomeOpsSnapshot(): Promise<HomeOpsSnapshot> {
 
   return {
     home: home ?? seedHome,
-    rooms,
+    rooms: roomRows.map(fromRoomRow),
     tasks: taskRows.map(fromTaskRow),
     completions: completionRows.map(fromCompletionRow),
     appliances: applianceRows.map(fromApplianceRow),
@@ -404,14 +547,18 @@ export async function importHomeOpsSnapshot(snapshot: HomeOpsSnapshot) {
 
     for (const room of rooms) {
       await db.runAsync(
-        `INSERT INTO rooms (id, homeId, name, type, icon, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO rooms (id, homeId, name, type, icon, notes, photoUri, createdAt, updatedAt, archivedAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         room.id,
         room.homeId,
         room.name,
         room.type,
         room.icon,
+        nullable(room.notes),
+        nullable(room.photoUri),
         room.createdAt,
         room.updatedAt,
+        nullable(room.archivedAt),
       );
     }
 
@@ -419,8 +566,9 @@ export async function importHomeOpsSnapshot(snapshot: HomeOpsSnapshot) {
       await db.runAsync(
         `INSERT INTO appliances (
           id, homeId, roomId, name, brand, modelNumber, serialNumber, purchaseDate,
-          manualUri, manualUrl, photoUri, notes, createdAt, updatedAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          purchaseVendor, warrantyExpiresAt, receiptUrl, manualUri, manualUrl, photoUri,
+          notes, createdAt, updatedAt, archivedAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         appliance.id,
         appliance.homeId,
         nullable(appliance.roomId),
@@ -429,23 +577,29 @@ export async function importHomeOpsSnapshot(snapshot: HomeOpsSnapshot) {
         nullable(appliance.modelNumber),
         nullable(appliance.serialNumber),
         nullable(appliance.purchaseDate),
+        nullable(appliance.purchaseVendor),
+        nullable(appliance.warrantyExpiresAt),
+        nullable(appliance.receiptUrl),
         nullable(appliance.manualUri),
         nullable(appliance.manualUrl),
         nullable(appliance.photoUri),
         nullable(appliance.notes),
         appliance.createdAt,
         appliance.updatedAt,
+        nullable(appliance.archivedAt),
       );
     }
 
     for (const supply of supplies) {
       await db.runAsync(
         `INSERT INTO supplies (
-          id, homeId, applianceId, taskId, name, type, sizeOrModel, brand,
-          notes, photoUri, lastPurchasedAt, createdAt, updatedAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          id, homeId, roomId, applianceId, taskId, name, type, sizeOrModel, brand,
+          notes, photoUri, lastPurchasedAt, lastPurchasedVendor, reorderUrl, quantityOnHand,
+          lowStockThreshold, createdAt, updatedAt, archivedAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         supply.id,
         supply.homeId,
+        nullable(supply.roomId),
         nullable(supply.applianceId),
         nullable(supply.taskId),
         supply.name,
@@ -455,8 +609,13 @@ export async function importHomeOpsSnapshot(snapshot: HomeOpsSnapshot) {
         nullable(supply.notes),
         nullable(supply.photoUri),
         nullable(supply.lastPurchasedAt),
+        nullable(supply.lastPurchasedVendor),
+        nullable(supply.reorderUrl),
+        supply.quantityOnHand ?? null,
+        supply.lowStockThreshold ?? null,
         supply.createdAt,
         supply.updatedAt,
+        nullable(supply.archivedAt),
       );
     }
 
@@ -606,22 +765,55 @@ export async function persistRoom(homeId: string, input: CreateRoomInput): Promi
     name: input.name.trim(),
     type: input.type,
     icon: input.icon,
+    notes: input.notes?.trim() || undefined,
     createdAt: now,
     updatedAt: now,
   };
 
   await db.runAsync(
-    `INSERT INTO rooms (id, homeId, name, type, icon, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO rooms (id, homeId, name, type, icon, notes, photoUri, createdAt, updatedAt, archivedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     room.id,
     room.homeId,
     room.name,
     room.type,
     room.icon,
+    nullable(room.notes),
+    null,
     room.createdAt,
     room.updatedAt,
+    null,
   );
 
   return room;
+}
+
+export async function updateRoom(roomId: string, input: CreateRoomInput) {
+  const db = await databasePromise;
+  const now = new Date().toISOString();
+
+  await db.runAsync(
+    `UPDATE rooms
+      SET name = ?,
+        type = ?,
+        icon = ?,
+        notes = ?,
+        updatedAt = ?
+      WHERE id = ?`,
+    input.name.trim(),
+    input.type,
+    input.icon,
+    input.notes?.trim() || null,
+    now,
+    roomId,
+  );
+}
+
+export async function archiveRoom(roomId: string) {
+  const db = await databasePromise;
+  const now = new Date().toISOString();
+
+  await db.runAsync(`UPDATE rooms SET archivedAt = ?, updatedAt = ? WHERE id = ?`, now, now, roomId);
 }
 
 export async function updateMaintenanceTask(taskId: string, input: CreateMaintenanceTaskInput) {
@@ -681,6 +873,9 @@ export async function persistAppliance(homeId: string, input: CreateApplianceInp
     modelNumber: input.modelNumber?.trim() || undefined,
     serialNumber: input.serialNumber?.trim() || undefined,
     purchaseDate: input.purchaseDate?.trim() || undefined,
+    purchaseVendor: input.purchaseVendor?.trim() || undefined,
+    warrantyExpiresAt: input.warrantyExpiresAt?.trim() || undefined,
+    receiptUrl: input.receiptUrl?.trim() || undefined,
     manualUrl: input.manualUrl?.trim() || undefined,
     notes: input.notes?.trim() || undefined,
     createdAt: now,
@@ -690,8 +885,9 @@ export async function persistAppliance(homeId: string, input: CreateApplianceInp
   await db.runAsync(
     `INSERT INTO appliances (
       id, homeId, roomId, name, brand, modelNumber, serialNumber, purchaseDate,
-      manualUri, manualUrl, photoUri, notes, createdAt, updatedAt
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      purchaseVendor, warrantyExpiresAt, receiptUrl, manualUri, manualUrl, photoUri,
+      notes, createdAt, updatedAt, archivedAt
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     appliance.id,
     appliance.homeId,
     nullable(appliance.roomId),
@@ -700,12 +896,16 @@ export async function persistAppliance(homeId: string, input: CreateApplianceInp
     nullable(appliance.modelNumber),
     nullable(appliance.serialNumber),
     nullable(appliance.purchaseDate),
+    nullable(appliance.purchaseVendor),
+    nullable(appliance.warrantyExpiresAt),
+    nullable(appliance.receiptUrl),
     null,
     nullable(appliance.manualUrl),
     null,
     nullable(appliance.notes),
     appliance.createdAt,
     appliance.updatedAt,
+    null,
   );
 
   return appliance;
@@ -723,6 +923,9 @@ export async function updateAppliance(applianceId: string, input: CreateApplianc
         modelNumber = ?,
         serialNumber = ?,
         purchaseDate = ?,
+        purchaseVendor = ?,
+        warrantyExpiresAt = ?,
+        receiptUrl = ?,
         manualUrl = ?,
         notes = ?,
         updatedAt = ?
@@ -733,11 +936,21 @@ export async function updateAppliance(applianceId: string, input: CreateApplianc
     input.modelNumber?.trim() || null,
     input.serialNumber?.trim() || null,
     input.purchaseDate?.trim() || null,
+    input.purchaseVendor?.trim() || null,
+    input.warrantyExpiresAt?.trim() || null,
+    input.receiptUrl?.trim() || null,
     input.manualUrl?.trim() || null,
     input.notes?.trim() || null,
     now,
     applianceId,
   );
+}
+
+export async function archiveAppliance(applianceId: string) {
+  const db = await databasePromise;
+  const now = new Date().toISOString();
+
+  await db.runAsync(`UPDATE appliances SET archivedAt = ?, updatedAt = ? WHERE id = ?`, now, now, applianceId);
 }
 
 export async function persistSupply(homeId: string, input: CreateSupplyInput): Promise<Supply> {
@@ -746,6 +959,7 @@ export async function persistSupply(homeId: string, input: CreateSupplyInput): P
   const supply: Supply = {
     id: `supply-${Date.now()}`,
     homeId,
+    roomId: input.roomId,
     applianceId: input.applianceId,
     taskId: input.taskId,
     name: input.name.trim(),
@@ -754,17 +968,23 @@ export async function persistSupply(homeId: string, input: CreateSupplyInput): P
     brand: input.brand?.trim() || undefined,
     notes: input.notes?.trim() || undefined,
     lastPurchasedAt: input.lastPurchasedAt?.trim() || undefined,
+    lastPurchasedVendor: input.lastPurchasedVendor?.trim() || undefined,
+    reorderUrl: input.reorderUrl?.trim() || undefined,
+    quantityOnHand: input.quantityOnHand,
+    lowStockThreshold: input.lowStockThreshold,
     createdAt: now,
     updatedAt: now,
   };
 
   await db.runAsync(
     `INSERT INTO supplies (
-      id, homeId, applianceId, taskId, name, type, sizeOrModel, brand,
-      notes, photoUri, lastPurchasedAt, createdAt, updatedAt
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id, homeId, roomId, applianceId, taskId, name, type, sizeOrModel, brand,
+      notes, photoUri, lastPurchasedAt, lastPurchasedVendor, reorderUrl, quantityOnHand,
+      lowStockThreshold, createdAt, updatedAt, archivedAt
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     supply.id,
     supply.homeId,
+    nullable(supply.roomId),
     nullable(supply.applianceId),
     nullable(supply.taskId),
     supply.name,
@@ -774,8 +994,13 @@ export async function persistSupply(homeId: string, input: CreateSupplyInput): P
     nullable(supply.notes),
     null,
     nullable(supply.lastPurchasedAt),
+    nullable(supply.lastPurchasedVendor),
+    nullable(supply.reorderUrl),
+    supply.quantityOnHand ?? null,
+    supply.lowStockThreshold ?? null,
     supply.createdAt,
     supply.updatedAt,
+    null,
   );
 
   return supply;
@@ -787,7 +1012,8 @@ export async function updateSupply(supplyId: string, input: CreateSupplyInput) {
 
   await db.runAsync(
     `UPDATE supplies
-      SET applianceId = ?,
+      SET roomId = ?,
+        applianceId = ?,
         taskId = ?,
         name = ?,
         type = ?,
@@ -795,8 +1021,13 @@ export async function updateSupply(supplyId: string, input: CreateSupplyInput) {
         brand = ?,
         notes = ?,
         lastPurchasedAt = ?,
+        lastPurchasedVendor = ?,
+        reorderUrl = ?,
+        quantityOnHand = ?,
+        lowStockThreshold = ?,
         updatedAt = ?
       WHERE id = ?`,
+    nullable(input.roomId),
     nullable(input.applianceId),
     nullable(input.taskId),
     input.name.trim(),
@@ -805,7 +1036,18 @@ export async function updateSupply(supplyId: string, input: CreateSupplyInput) {
     input.brand?.trim() || null,
     input.notes?.trim() || null,
     input.lastPurchasedAt?.trim() || null,
+    input.lastPurchasedVendor?.trim() || null,
+    input.reorderUrl?.trim() || null,
+    input.quantityOnHand ?? null,
+    input.lowStockThreshold ?? null,
     now,
     supplyId,
   );
+}
+
+export async function archiveSupply(supplyId: string) {
+  const db = await databasePromise;
+  const now = new Date().toISOString();
+
+  await db.runAsync(`UPDATE supplies SET archivedAt = ?, updatedAt = ? WHERE id = ?`, now, now, supplyId);
 }

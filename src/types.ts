@@ -18,8 +18,11 @@ export type Room = {
   name: string;
   type: string;
   icon: string;
+  notes?: string;
+  photoUri?: string;
   createdAt: string;
   updatedAt: string;
+  archivedAt?: string;
 };
 
 export type MaintenanceTask = {
@@ -59,17 +62,22 @@ export type Appliance = {
   modelNumber?: string;
   serialNumber?: string;
   purchaseDate?: string;
+  purchaseVendor?: string;
+  warrantyExpiresAt?: string;
+  receiptUrl?: string;
   manualUri?: string;
   manualUrl?: string;
   photoUri?: string;
   notes?: string;
   createdAt: string;
   updatedAt: string;
+  archivedAt?: string;
 };
 
 export type Supply = {
   id: string;
   homeId: string;
+  roomId?: string;
   applianceId?: string;
   taskId?: string;
   name: string;
@@ -79,8 +87,13 @@ export type Supply = {
   notes?: string;
   photoUri?: string;
   lastPurchasedAt?: string;
+  lastPurchasedVendor?: string;
+  reorderUrl?: string;
+  quantityOnHand?: number;
+  lowStockThreshold?: number;
   createdAt: string;
   updatedAt: string;
+  archivedAt?: string;
 };
 
 export type SeasonalChecklistItem = {
@@ -113,6 +126,7 @@ export type CreateRoomInput = {
   name: string;
   type: string;
   icon: string;
+  notes?: string;
 };
 
 export type CreateApplianceInput = {
@@ -122,6 +136,9 @@ export type CreateApplianceInput = {
   modelNumber?: string;
   serialNumber?: string;
   purchaseDate?: string;
+  purchaseVendor?: string;
+  warrantyExpiresAt?: string;
+  receiptUrl?: string;
   manualUrl?: string;
   notes?: string;
 };
@@ -132,7 +149,12 @@ export type CreateSupplyInput = {
   sizeOrModel?: string;
   brand?: string;
   notes?: string;
+  roomId?: string;
   applianceId?: string;
   taskId?: string;
   lastPurchasedAt?: string;
+  lastPurchasedVendor?: string;
+  reorderUrl?: string;
+  quantityOnHand?: number;
+  lowStockThreshold?: number;
 };

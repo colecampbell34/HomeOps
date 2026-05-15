@@ -38,6 +38,9 @@ export function ApplianceFormModal({
   const [modelNumber, setModelNumber] = useState('');
   const [serialNumber, setSerialNumber] = useState('');
   const [purchaseDate, setPurchaseDate] = useState('');
+  const [purchaseVendor, setPurchaseVendor] = useState('');
+  const [warrantyExpiresAt, setWarrantyExpiresAt] = useState('');
+  const [receiptUrl, setReceiptUrl] = useState('');
   const [manualUrl, setManualUrl] = useState('');
   const [notes, setNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -56,6 +59,9 @@ export function ApplianceFormModal({
     setModelNumber(initialAppliance?.modelNumber ?? '');
     setSerialNumber(initialAppliance?.serialNumber ?? '');
     setPurchaseDate(initialAppliance?.purchaseDate ?? '');
+    setPurchaseVendor(initialAppliance?.purchaseVendor ?? '');
+    setWarrantyExpiresAt(initialAppliance?.warrantyExpiresAt ?? '');
+    setReceiptUrl(initialAppliance?.receiptUrl ?? '');
     setManualUrl(initialAppliance?.manualUrl ?? '');
     setNotes(initialAppliance?.notes ?? '');
   }, [defaultRoomId, initialAppliance, visible]);
@@ -75,6 +81,9 @@ export function ApplianceFormModal({
         modelNumber,
         serialNumber,
         purchaseDate,
+        purchaseVendor,
+        warrantyExpiresAt,
+        receiptUrl,
         manualUrl,
         notes,
       });
@@ -116,8 +125,13 @@ export function ApplianceFormModal({
           </View>
 
           <Field label="Serial number" value={serialNumber} onChangeText={setSerialNumber} placeholder="Optional" />
-          <Field label="Purchase date" value={purchaseDate} onChangeText={setPurchaseDate} placeholder="YYYY-MM-DD or note" />
-          <Field label="Manual URL" value={manualUrl} onChangeText={setManualUrl} placeholder="https://..." />
+          <View style={styles.twoColumn}>
+            <Field label="Purchase date" value={purchaseDate} onChangeText={setPurchaseDate} placeholder="YYYY-MM-DD or note" />
+            <Field label="Vendor" value={purchaseVendor} onChangeText={setPurchaseVendor} placeholder="Store or installer" />
+          </View>
+          <Field label="Warranty expires" value={warrantyExpiresAt} onChangeText={setWarrantyExpiresAt} placeholder="YYYY-MM-DD or note" />
+          <Field label="Receipt URL" value={receiptUrl} onChangeText={setReceiptUrl} placeholder="https://..." autoCapitalize="none" />
+          <Field label="Manual URL" value={manualUrl} onChangeText={setManualUrl} placeholder="https://..." autoCapitalize="none" />
 
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Notes</Text>
@@ -156,18 +170,20 @@ function Field({
   onChangeText,
   placeholder,
   autoFocus,
+  autoCapitalize = 'words',
 }: {
   label: string;
   value: string;
   onChangeText: (value: string) => void;
   placeholder?: string;
   autoFocus?: boolean;
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
 }) {
   return (
     <View style={styles.fieldGroupHalf}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
-        autoCapitalize="words"
+        autoCapitalize={autoCapitalize}
         autoFocus={autoFocus}
         onChangeText={onChangeText}
         placeholder={placeholder}

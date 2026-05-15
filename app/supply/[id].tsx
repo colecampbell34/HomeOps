@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
@@ -12,10 +12,36 @@ import { formatLongDate } from '../../src/utils/dates';
 export default function SupplyDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { appliances, getApplianceName, getTaskTitle, supplies, tasks, updateSupply } = useHomeOps();
+  const { appliances, archiveSupply, getApplianceName, getRoomName, getTaskTitle, rooms, supplies, tasks, updateSupply } = useHomeOps();
   const [isEditing, setIsEditing] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
 
   const supply = supplies.find((candidate) => candidate.id === id);
+  const isLowStock =
+    typeof supply?.quantityOnHand === 'number' &&
+    typeof supply?.lowStockThreshold === 'number' &&
+    supply.quantityOnHand <= supply.lowStockThreshold;
+
+  async function handleArchive() {
+    if (!supply || isArchiving) {
+      return;
+    }
+
+    if (!confirmArchive) {
+      setConfirmArchive(true);
+      return;
+    }
+
+    setIsArchiving(true);
+
+    try {
+      await archiveSupply(supply.id);
+      router.replace('/(tabs)/assets');
+    } finally {
+      setIsArchiving(false);
+    }
+  }
 
   if (!supply) {
     return (
@@ -47,15 +73,43 @@ export default function SupplyDetailScreen() {
           <Text style={styles.eyebrow}>{supply.type}</Text>
           <Text style={styles.title}>{supply.name}</Text>
           <Text style={styles.subtitle}>{supply.sizeOrModel || 'Size/model not set'}</Text>
+          {isLowStock && (
+            <View style={styles.lowStockBadge}>
+              <Ionicons name="alert-circle-outline" size={14} color={colors.amber} />
+              <Text style={styles.lowStockText}>Low stock</Text>
+            </View>
+          )}
         </View>
       </View>
 
       <View style={styles.detailGrid}>
+        <InfoCell label="Quantity" value={formatQuantity(supply.quantityOnHand)} />
+        <InfoCell label="Low stock at" value={formatQuantity(supply.lowStockThreshold)} />
         <InfoCell label="Brand" value={supply.brand || 'Not set'} />
         <InfoCell label="Last purchased" value={supply.lastPurchasedAt ? formatLongDate(supply.lastPurchasedAt) : 'Not set'} />
+        <InfoCell label="Vendor" value={supply.lastPurchasedVendor || 'Not set'} />
+        <InfoCell label="Room" value={getRoomName(supply.roomId)} />
         <InfoCell label="Appliance" value={getApplianceName(supply.applianceId)} />
         <InfoCell label="Task" value={getTaskTitle(supply.taskId)} />
       </View>
+
+      {!!supply.reorderUrl && (
+        <Pressable accessibilityRole="link" onPress={() => Linking.openURL(supply.reorderUrl!)} style={styles.linkRow}>
+          <Ionicons name="cart-outline" size={19} color={colors.primary} />
+          <Text style={styles.linkText} numberOfLines={2}>
+            Reorder supply
+          </Text>
+          <Ionicons name="open-outline" size={18} color={colors.textMuted} />
+        </Pressable>
+      )}
+
+      {!!supply.roomId && (
+        <Pressable accessibilityRole="button" onPress={() => router.push(`/room/${supply.roomId}`)} style={styles.linkRow}>
+          <Ionicons name="home-outline" size={19} color={colors.primary} />
+          <Text style={styles.linkText}>Open {getRoomName(supply.roomId)}</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </Pressable>
+      )}
 
       {!!supply.applianceId && (
         <Pressable accessibilityRole="button" onPress={() => router.push(`/appliance/${supply.applianceId}`)} style={styles.linkRow}>
@@ -80,9 +134,19 @@ export default function SupplyDetailScreen() {
         </View>
       )}
 
+      <Pressable
+        accessibilityRole="button"
+        onPress={handleArchive}
+        style={({ pressed }) => [styles.archiveButton, pressed && styles.archiveButtonPressed]}
+      >
+        <Ionicons name={confirmArchive ? 'alert-circle-outline' : 'archive-outline'} size={17} color={colors.red} />
+        <Text style={styles.archiveButtonText}>{isArchiving ? 'Archiving' : confirmArchive ? 'Confirm archive supply' : 'Archive supply'}</Text>
+      </Pressable>
+
       <SupplyFormModal
         visible={isEditing}
         appliances={appliances}
+        rooms={rooms}
         tasks={tasks}
         initialSupply={supply}
         onClose={() => setIsEditing(false)}
@@ -90,6 +154,10 @@ export default function SupplyDetailScreen() {
       />
     </Screen>
   );
+}
+
+function formatQuantity(value?: number): string {
+  return typeof value === 'number' ? String(value) : 'Not set';
 }
 
 function BackButton({ onPress }: { onPress: () => void }) {
@@ -174,6 +242,24 @@ const styles = StyleSheet.create({
     fontSize: font.body,
     lineHeight: 21,
   },
+  lowStockBadge: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: colors.amberSurface,
+    borderColor: '#EACB9A',
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+  },
+  lowStockText: {
+    color: colors.amber,
+    fontSize: font.tiny,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
   detailGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -217,6 +303,26 @@ const styles = StyleSheet.create({
     color: colors.primary,
     flex: 1,
     fontSize: font.body,
+    fontWeight: '800',
+  },
+  archiveButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderColor: '#F1C7C0',
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    justifyContent: 'center',
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
+  },
+  archiveButtonPressed: {
+    backgroundColor: colors.redSurface,
+  },
+  archiveButtonText: {
+    color: colors.red,
+    fontSize: font.small,
     fontWeight: '800',
   },
   sectionBlock: {

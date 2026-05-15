@@ -230,7 +230,10 @@ export default function TaskDetailScreen() {
             style={styles.supplyRow}
           >
             <Text style={styles.supplyTitle}>{supply.name}</Text>
-            <Text style={styles.supplyMeta}>{supply.sizeOrModel || supply.type}</Text>
+            <Text style={styles.supplyMeta}>
+              {supply.sizeOrModel || supply.type}
+              {typeof supply.quantityOnHand === 'number' ? ` · Qty ${supply.quantityOnHand}` : ''}
+            </Text>
           </Pressable>
         ))
       )}
@@ -268,7 +271,9 @@ export default function TaskDetailScreen() {
       <SupplyFormModal
         visible={isSupplyFormOpen}
         appliances={appliances}
+        rooms={rooms}
         tasks={tasks}
+        defaultRoomId={task.roomId}
         defaultTaskId={task.id}
         onClose={() => setIsSupplyFormOpen(false)}
         onSubmit={addSupply}

@@ -2,7 +2,10 @@ import { PropsWithChildren, createContext, useCallback, useContext, useEffect, u
 
 import { seedHome, seedRooms } from '../data/seed';
 import {
+  archiveAppliance as archivePersistedAppliance,
   archiveMaintenanceTask,
+  archiveRoom as archivePersistedRoom,
+  archiveSupply as archivePersistedSupply,
   exportHomeOpsSnapshot,
   HomeOpsSnapshot,
   initializeDatabase,
@@ -18,6 +21,7 @@ import {
   rescheduleMaintenanceTask,
   updateAppliance,
   updateMaintenanceTask,
+  updateRoom,
   updateSupply,
 } from '../storage/database';
 import { addRecurrence, compareDueDate, getTaskStatus, toISODate, today } from '../utils/dates';
@@ -41,6 +45,7 @@ type HomeOpsState = {
   completions: TaskCompletion[];
   appliances: Appliance[];
   supplies: Supply[];
+  lowStockSupplies: Supply[];
   isReady: boolean;
   hasCompletedWalkthrough: boolean;
   error?: string;
@@ -51,12 +56,16 @@ type HomeOpsState = {
   archiveTask: (taskId: string) => Promise<void>;
   rescheduleTask: (taskId: string, nextDueAt: string) => Promise<void>;
   addRoom: (input: CreateRoomInput) => Promise<void>;
+  updateRoom: (roomId: string, input: CreateRoomInput) => Promise<void>;
+  archiveRoom: (roomId: string) => Promise<void>;
   addTask: (input: CreateMaintenanceTaskInput) => Promise<void>;
   updateTask: (taskId: string, input: CreateMaintenanceTaskInput) => Promise<void>;
   addAppliance: (input: CreateApplianceInput) => Promise<void>;
   updateAppliance: (applianceId: string, input: CreateApplianceInput) => Promise<void>;
+  archiveAppliance: (applianceId: string) => Promise<void>;
   addSupply: (input: CreateSupplyInput) => Promise<void>;
   updateSupply: (supplyId: string, input: CreateSupplyInput) => Promise<void>;
+  archiveSupply: (supplyId: string) => Promise<void>;
   completeWalkthrough: () => Promise<void>;
   exportData: () => Promise<HomeOpsSnapshot>;
   importData: (snapshot: HomeOpsSnapshot) => Promise<void>;
@@ -177,6 +186,22 @@ export function HomeOpsProvider({ children }: PropsWithChildren) {
     [home.id, refreshSnapshot],
   );
 
+  const saveRoom = useCallback(
+    async (roomId: string, input: CreateRoomInput) => {
+      await updateRoom(roomId, input);
+      await refreshSnapshot();
+    },
+    [refreshSnapshot],
+  );
+
+  const archiveRoom = useCallback(
+    async (roomId: string) => {
+      await archivePersistedRoom(roomId);
+      await refreshSnapshot();
+    },
+    [refreshSnapshot],
+  );
+
   const updateTask = useCallback(
     async (taskId: string, input: CreateMaintenanceTaskInput) => {
       await updateMaintenanceTask(taskId, input);
@@ -201,6 +226,14 @@ export function HomeOpsProvider({ children }: PropsWithChildren) {
     [refreshSnapshot],
   );
 
+  const archiveAppliance = useCallback(
+    async (applianceId: string) => {
+      await archivePersistedAppliance(applianceId);
+      await refreshSnapshot();
+    },
+    [refreshSnapshot],
+  );
+
   const addSupply = useCallback(
     async (input: CreateSupplyInput) => {
       await persistSupply(home.id, input);
@@ -212,6 +245,14 @@ export function HomeOpsProvider({ children }: PropsWithChildren) {
   const saveSupply = useCallback(
     async (supplyId: string, input: CreateSupplyInput) => {
       await updateSupply(supplyId, input);
+      await refreshSnapshot();
+    },
+    [refreshSnapshot],
+  );
+
+  const archiveSupply = useCallback(
+    async (supplyId: string) => {
+      await archivePersistedSupply(supplyId);
       await refreshSnapshot();
     },
     [refreshSnapshot],
@@ -239,6 +280,15 @@ export function HomeOpsProvider({ children }: PropsWithChildren) {
 
   const value = useMemo<HomeOpsState>(() => {
     const activeTasks = tasks.filter((task) => !task.archivedAt);
+    const activeRooms = rooms.filter((room) => !room.archivedAt);
+    const activeAppliances = appliances.filter((appliance) => !appliance.archivedAt);
+    const activeSupplies = supplies.filter((supply) => !supply.archivedAt);
+    const lowStockSupplies = activeSupplies.filter(
+      (supply) =>
+        typeof supply.quantityOnHand === 'number' &&
+        typeof supply.lowStockThreshold === 'number' &&
+        supply.quantityOnHand <= supply.lowStockThreshold,
+    );
     const overdueTasks = activeTasks.filter((task) => getTaskStatus(task) === 'overdue').sort(compareDueDate);
     const upcomingTasks = activeTasks
       .filter((task) => {
@@ -257,11 +307,12 @@ export function HomeOpsProvider({ children }: PropsWithChildren) {
 
     return {
       home,
-      rooms,
+      rooms: activeRooms,
       tasks: activeTasks,
       completions,
-      appliances,
-      supplies,
+      appliances: activeAppliances,
+      supplies: activeSupplies,
+      lowStockSupplies,
       isReady,
       hasCompletedWalkthrough,
       error,
@@ -272,12 +323,16 @@ export function HomeOpsProvider({ children }: PropsWithChildren) {
       archiveTask,
       rescheduleTask,
       addRoom,
+      updateRoom: saveRoom,
+      archiveRoom,
       addTask,
       updateTask,
       addAppliance,
       updateAppliance: saveAppliance,
+      archiveAppliance,
       addSupply,
       updateSupply: saveSupply,
+      archiveSupply,
       completeWalkthrough,
       exportData,
       importData,
@@ -289,9 +344,12 @@ export function HomeOpsProvider({ children }: PropsWithChildren) {
     };
   }, [
     addAppliance,
+    archiveAppliance,
+    archiveRoom,
     addRoom,
     addSupply,
     addTask,
+    archiveSupply,
     archiveTask,
     appliances,
     completeTask,
@@ -307,6 +365,7 @@ export function HomeOpsProvider({ children }: PropsWithChildren) {
     resetData,
     rooms,
     saveAppliance,
+    saveRoom,
     saveSupply,
     supplies,
     tasks,

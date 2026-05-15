@@ -5,6 +5,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { ApplianceFormModal } from '../../src/components/ApplianceFormModal';
 import { QuickAddTaskModal } from '../../src/components/QuickAddTaskModal';
+import { RoomFormModal } from '../../src/components/RoomFormModal';
 import { Screen } from '../../src/components/Screen';
 import { SectionHeader } from '../../src/components/SectionHeader';
 import { SupplyFormModal } from '../../src/components/SupplyFormModal';
@@ -16,21 +17,56 @@ import { getTaskStatus } from '../../src/utils/dates';
 export default function RoomDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { addAppliance, addSupply, appliances, completeTask, rooms, supplies, tasks, addTask } = useHomeOps();
+  const {
+    addAppliance,
+    addSupply,
+    appliances,
+    archiveRoom,
+    completeTask,
+    rooms,
+    supplies,
+    tasks,
+    addTask,
+    updateRoom,
+  } = useHomeOps();
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isApplianceFormOpen, setIsApplianceFormOpen] = useState(false);
   const [isSupplyFormOpen, setIsSupplyFormOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
 
   const room = rooms.find((candidate) => candidate.id === id);
   const roomTasks = tasks.filter((task) => task.roomId === id);
   const roomAppliances = appliances.filter((appliance) => appliance.roomId === id);
   const roomSupplies = supplies.filter(
     (supply) =>
+      supply.roomId === id ||
       roomAppliances.some((appliance) => appliance.id === supply.applianceId) ||
       roomTasks.some((task) => task.id === supply.taskId),
   );
   const overdueCount = roomTasks.filter((task) => getTaskStatus(task) === 'overdue').length;
   const dueSoonCount = roomTasks.filter((task) => getTaskStatus(task) === 'due-soon').length;
+
+  async function handleArchive() {
+    if (!room || isArchiving) {
+      return;
+    }
+
+    if (!confirmArchive) {
+      setConfirmArchive(true);
+      return;
+    }
+
+    setIsArchiving(true);
+
+    try {
+      await archiveRoom(room.id);
+      router.replace('/(tabs)/rooms');
+    } finally {
+      setIsArchiving(false);
+    }
+  }
 
   if (!room) {
     return (
@@ -54,15 +90,26 @@ export default function RoomDetailScreen() {
         <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={styles.iconButton}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Add task to ${room.name}`}
-          onPress={() => setIsQuickAddOpen(true)}
-          style={styles.addButton}
-        >
-          <Ionicons name="add" size={17} color={colors.white} />
-          <Text style={styles.addButtonText}>Task</Text>
-        </Pressable>
+        <View style={styles.topActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Edit ${room.name}`}
+            onPress={() => setIsEditing(true)}
+            style={styles.editButton}
+          >
+            <Ionicons name="create-outline" size={17} color={colors.primary} />
+            <Text style={styles.editButtonText}>Edit</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Add task to ${room.name}`}
+            onPress={() => setIsQuickAddOpen(true)}
+            style={styles.addButton}
+          >
+            <Ionicons name="add" size={17} color={colors.white} />
+            <Text style={styles.addButtonText}>Task</Text>
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.header}>
@@ -77,6 +124,13 @@ export default function RoomDetailScreen() {
           </Text>
         </View>
       </View>
+
+      {!!room.notes && (
+        <View style={styles.sectionBlock}>
+          <Text style={styles.blockTitle}>Notes</Text>
+          <Text style={styles.blockText}>{room.notes}</Text>
+        </View>
+      )}
 
       <View style={styles.placeholderRow}>
         <Pressable
@@ -146,7 +200,10 @@ export default function RoomDetailScreen() {
             </View>
             <View style={styles.assetText}>
               <Text style={styles.assetTitle}>{supply.name}</Text>
-              <Text style={styles.assetMeta}>{supply.sizeOrModel || supply.type}</Text>
+              <Text style={styles.assetMeta}>
+                {supply.sizeOrModel || supply.type}
+                {typeof supply.quantityOnHand === 'number' ? ` · Qty ${supply.quantityOnHand}` : ''}
+              </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
           </Pressable>
@@ -171,6 +228,17 @@ export default function RoomDetailScreen() {
         ))
       )}
 
+      <Pressable
+        accessibilityRole="button"
+        onPress={handleArchive}
+        style={({ pressed }) => [styles.archiveButton, pressed && styles.archiveButtonPressed]}
+      >
+        <Ionicons name={confirmArchive ? 'alert-circle-outline' : 'archive-outline'} size={17} color={colors.red} />
+        <Text style={styles.archiveButtonText}>
+          {isArchiving ? 'Archiving' : confirmArchive ? 'Confirm archive room' : 'Archive room'}
+        </Text>
+      </Pressable>
+
       <QuickAddTaskModal
         visible={isQuickAddOpen}
         rooms={rooms}
@@ -191,9 +259,18 @@ export default function RoomDetailScreen() {
       <SupplyFormModal
         visible={isSupplyFormOpen}
         appliances={appliances}
+        rooms={rooms}
         tasks={tasks}
+        defaultRoomId={room.id}
         onClose={() => setIsSupplyFormOpen(false)}
         onSubmit={addSupply}
+      />
+
+      <RoomFormModal
+        visible={isEditing}
+        initialRoom={room}
+        onClose={() => setIsEditing(false)}
+        onSubmit={(input) => updateRoom(room.id, input)}
       />
     </Screen>
   );
@@ -214,6 +291,27 @@ const styles = StyleSheet.create({
     height: 42,
     justifyContent: 'center',
     width: 42,
+  },
+  topActions: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  editButton: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    minHeight: 42,
+    paddingHorizontal: spacing.md,
+  },
+  editButtonText: {
+    color: colors.primary,
+    fontSize: font.small,
+    fontWeight: '800',
   },
   addButton: {
     alignItems: 'center',
@@ -266,6 +364,24 @@ const styles = StyleSheet.create({
   placeholderRow: {
     flexDirection: 'row',
     gap: spacing.md,
+  },
+  sectionBlock: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.lg,
+  },
+  blockTitle: {
+    color: colors.text,
+    fontSize: font.body,
+    fontWeight: '800',
+  },
+  blockText: {
+    color: colors.textMuted,
+    fontSize: font.small,
+    lineHeight: 19,
   },
   placeholderCell: {
     backgroundColor: colors.surface,
@@ -320,6 +436,26 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: font.small,
     lineHeight: 18,
+  },
+  archiveButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderColor: '#F1C7C0',
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    justifyContent: 'center',
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
+  },
+  archiveButtonPressed: {
+    backgroundColor: colors.redSurface,
+  },
+  archiveButtonText: {
+    color: colors.red,
+    fontSize: font.small,
+    fontWeight: '800',
   },
   emptyBlock: {
     backgroundColor: colors.surface,

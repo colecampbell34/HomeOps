@@ -13,13 +13,15 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, font, radii, spacing } from '../theme';
-import { Appliance, CreateSupplyInput, MaintenanceTask, Supply } from '../types';
+import { Appliance, CreateSupplyInput, MaintenanceTask, Room, Supply } from '../types';
 
 type SupplyFormModalProps = {
   visible: boolean;
   appliances: Appliance[];
+  rooms: Room[];
   tasks: MaintenanceTask[];
   initialSupply?: Supply;
+  defaultRoomId?: string;
   defaultApplianceId?: string;
   defaultTaskId?: string;
   onClose: () => void;
@@ -29,8 +31,10 @@ type SupplyFormModalProps = {
 export function SupplyFormModal({
   visible,
   appliances,
+  rooms,
   tasks,
   initialSupply,
+  defaultRoomId,
   defaultApplianceId,
   defaultTaskId,
   onClose,
@@ -41,9 +45,14 @@ export function SupplyFormModal({
   const [sizeOrModel, setSizeOrModel] = useState('');
   const [brand, setBrand] = useState('');
   const [notes, setNotes] = useState('');
+  const [roomId, setRoomId] = useState<string | undefined>();
   const [applianceId, setApplianceId] = useState<string | undefined>();
   const [taskId, setTaskId] = useState<string | undefined>();
   const [lastPurchasedAt, setLastPurchasedAt] = useState('');
+  const [lastPurchasedVendor, setLastPurchasedVendor] = useState('');
+  const [reorderUrl, setReorderUrl] = useState('');
+  const [quantityOnHand, setQuantityOnHand] = useState('');
+  const [lowStockThreshold, setLowStockThreshold] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
   const canSave = name.trim().length > 0 && !isSaving;
@@ -59,10 +68,15 @@ export function SupplyFormModal({
     setSizeOrModel(initialSupply?.sizeOrModel ?? '');
     setBrand(initialSupply?.brand ?? '');
     setNotes(initialSupply?.notes ?? '');
+    setRoomId(initialSupply?.roomId ?? defaultRoomId);
     setApplianceId(initialSupply?.applianceId ?? defaultApplianceId);
     setTaskId(initialSupply?.taskId ?? defaultTaskId);
     setLastPurchasedAt(initialSupply?.lastPurchasedAt ?? '');
-  }, [defaultApplianceId, defaultTaskId, initialSupply, visible]);
+    setLastPurchasedVendor(initialSupply?.lastPurchasedVendor ?? '');
+    setReorderUrl(initialSupply?.reorderUrl ?? '');
+    setQuantityOnHand(formatOptionalNumber(initialSupply?.quantityOnHand));
+    setLowStockThreshold(formatOptionalNumber(initialSupply?.lowStockThreshold));
+  }, [defaultApplianceId, defaultRoomId, defaultTaskId, initialSupply, visible]);
 
   async function handleSubmit() {
     if (!canSave) {
@@ -78,9 +92,14 @@ export function SupplyFormModal({
         sizeOrModel,
         brand,
         notes,
+        roomId,
         applianceId,
         taskId,
         lastPurchasedAt,
+        lastPurchasedVendor,
+        reorderUrl,
+        quantityOnHand: parseOptionalNumber(quantityOnHand),
+        lowStockThreshold: parseOptionalNumber(lowStockThreshold),
       });
       onClose();
     } finally {
@@ -108,7 +127,31 @@ export function SupplyFormModal({
             <Field label="Size or model" value={sizeOrModel} onChangeText={setSizeOrModel} placeholder="16 x 25 x 1" />
           </View>
           <Field label="Brand" value={brand} onChangeText={setBrand} placeholder="Optional" />
-          <Field label="Last purchased" value={lastPurchasedAt} onChangeText={setLastPurchasedAt} placeholder="YYYY-MM-DD or note" />
+          <View style={styles.twoColumn}>
+            <Field label="Quantity" value={quantityOnHand} onChangeText={setQuantityOnHand} placeholder="2" keyboardType="decimal-pad" />
+            <Field
+              label="Low stock at"
+              value={lowStockThreshold}
+              onChangeText={setLowStockThreshold}
+              placeholder="1"
+              keyboardType="decimal-pad"
+            />
+          </View>
+          <View style={styles.twoColumn}>
+            <Field label="Last purchased" value={lastPurchasedAt} onChangeText={setLastPurchasedAt} placeholder="YYYY-MM-DD or note" />
+            <Field label="Vendor" value={lastPurchasedVendor} onChangeText={setLastPurchasedVendor} placeholder="Store or site" />
+          </View>
+          <Field label="Reorder link" value={reorderUrl} onChangeText={setReorderUrl} placeholder="https://..." autoCapitalize="none" />
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Linked room</Text>
+            <View style={styles.chips}>
+              <ChoiceChip label="None" selected={!roomId} onPress={() => setRoomId(undefined)} />
+              {rooms.map((room) => (
+                <ChoiceChip key={room.id} label={room.name} selected={roomId === room.id} onPress={() => setRoomId(room.id)} />
+              ))}
+            </View>
+          </View>
 
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Linked appliance</Text>
@@ -172,19 +215,24 @@ function Field({
   onChangeText,
   placeholder,
   autoFocus,
+  autoCapitalize = 'words',
+  keyboardType,
 }: {
   label: string;
   value: string;
   onChangeText: (value: string) => void;
   placeholder?: string;
   autoFocus?: boolean;
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+  keyboardType?: 'default' | 'decimal-pad';
 }) {
   return (
     <View style={styles.fieldGroupHalf}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
-        autoCapitalize="words"
+        autoCapitalize={autoCapitalize}
         autoFocus={autoFocus}
+        keyboardType={keyboardType}
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={colors.textMuted}
@@ -193,6 +241,21 @@ function Field({
       />
     </View>
   );
+}
+
+function parseOptionalNumber(value: string): number | undefined {
+  const normalizedValue = value.trim();
+
+  if (!normalizedValue) {
+    return undefined;
+  }
+
+  const parsedValue = Number(normalizedValue);
+  return Number.isFinite(parsedValue) ? parsedValue : undefined;
+}
+
+function formatOptionalNumber(value?: number): string {
+  return typeof value === 'number' ? String(value) : '';
 }
 
 function ChoiceChip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {

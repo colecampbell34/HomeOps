@@ -13,6 +13,38 @@ This list tracks meaningful features and polish that are not yet implemented. It
 - Snooze task actions for one week or one month.
 - Archive task action that removes tasks from active lists while keeping history.
 
+## Added in v3
+
+- Supply inventory fields for quantity on hand and low-stock threshold.
+- Low-stock supply surfacing on the dashboard and Assets tab.
+- Direct room links for supplies, including room-scoped supply creation.
+- Reorder URL and last purchased vendor/store fields for supplies.
+- Supply archive action that removes supplies from active lists while preserving data.
+- Supply detail polish for stock status, linked room, reorder, vendor, appliance, and task context.
+
+## Added in v4
+
+- Edit room name, type, icon, and notes from room detail.
+- Archive rooms safely while preserving linked tasks, appliances, supplies, and history.
+- Room-level notes shown on room detail and room list previews.
+- Common room setup templates for starter homes, apartments, and whole-property setups.
+- Richer room list counts for tasks, appliances, and direct supplies.
+
+## Added in v5
+
+- Common room setup buttons now preview suggested rooms instead of bulk-creating them.
+- Suggested setup rooms are temporary until the user taps Add on an individual room.
+- Switching common setups replaces the pending suggestions rather than stacking saved rooms.
+- Template suggestions detect rooms that already exist and mark them as added.
+
+## Added in v6
+
+- Appliance records now include purchase vendor, warranty expiration, and receipt URL fields.
+- Appliance detail now shows warranty, vendor, receipt, and manual context.
+- Receipt links can be opened directly from appliance detail.
+- Appliance service history now summarizes completed tasks linked directly to that appliance.
+- Appliance archive action removes appliances from active lists while preserving linked tasks, supplies, and history.
+
 ## User Accounts, Sync, and Data Ownership
 
 - User authentication for web and future native accounts.
@@ -37,11 +69,8 @@ This list tracks meaningful features and polish that are not yet implemented. It
 
 ## Rooms
 
-- Edit room name/type/icon.
-- Delete/archive rooms safely.
-- Room templates for common home setups.
-- Room-level notes or photos.
-- Better handling for supplies that belong directly to a room without an appliance/task link.
+- Room photo.
+- Delete room flow with confirmation, if needed after archive.
 
 ## Maintenance Tasks
 
@@ -66,19 +95,13 @@ This list tracks meaningful features and polish that are not yet implemented. It
 - Manual/document photo upload.
 - Automatic manual lookup from brand/model number.
 - Link existing tasks to appliance from appliance detail.
-- Archive/delete appliance.
-- Warranty and purchase receipt fields.
-- Service history per appliance.
+- Delete appliance flow with confirmation, if needed after archive.
 
 ## Supplies and Parts
 
 - Supply photo.
-- Reorder link.
-- Last purchased vendor/store.
-- Quantity on hand.
-- Low-stock reminder.
-- Link existing supply to room directly.
-- Archive/delete supply.
+- Low-stock notification/reminder scheduling.
+- Delete supply flow with confirmation, if needed after archive.
 
 ## Seasonal Checklists
 

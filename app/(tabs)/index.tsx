@@ -15,8 +15,21 @@ import { formatShortDate } from '../../src/utils/dates';
 
 export default function DashboardScreen() {
   const router = useRouter();
-  const { addTask, appliances, completeTask, error, getRoomName, home, isReady, overdueTasks, recentCompletions, rooms, tasks, upcomingTasks } =
-    useHomeOps();
+  const {
+    addTask,
+    appliances,
+    completeTask,
+    error,
+    getRoomName,
+    home,
+    isReady,
+    lowStockSupplies,
+    overdueTasks,
+    recentCompletions,
+    rooms,
+    tasks,
+    upcomingTasks,
+  } = useHomeOps();
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const tasksDueSoon = upcomingTasks.filter((task) => {
     if (!task.nextDueAt) {
@@ -72,7 +85,7 @@ export default function DashboardScreen() {
           <Text style={styles.statusTitle}>{statusTone}</Text>
           <Text style={styles.statusText}>
             {hasAnyActivity
-              ? `${overdueTasks.length} overdue · ${tasksDueSoon} due soon · ${tasks.length} active tasks`
+              ? `${overdueTasks.length} overdue · ${tasksDueSoon} due soon · ${lowStockSupplies.length} low stock`
               : 'Start by adding rooms, recurring tasks, or supplies you buy repeatedly.'}
           </Text>
         </View>
@@ -104,6 +117,31 @@ export default function DashboardScreen() {
           <Text style={styles.actionText}>Supplies</Text>
         </Pressable>
       </View>
+
+      {lowStockSupplies.length > 0 && (
+        <>
+          <SectionHeader title="Low-stock supplies" count={lowStockSupplies.length} />
+          {lowStockSupplies.slice(0, 3).map((supply) => (
+            <Pressable
+              key={supply.id}
+              accessibilityRole="button"
+              onPress={() => router.push(`/supply/${supply.id}`)}
+              style={({ pressed }) => [styles.supplyRow, pressed && styles.supplyRowPressed]}
+            >
+              <View style={styles.supplyIcon}>
+                <Ionicons name="alert-circle-outline" size={18} color={colors.amber} />
+              </View>
+              <View style={styles.supplyText}>
+                <Text style={styles.supplyTitle}>{supply.name}</Text>
+                <Text style={styles.supplyMeta}>
+                  Qty {formatQuantity(supply.quantityOnHand)} · low at {formatQuantity(supply.lowStockThreshold)}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+            </Pressable>
+          ))}
+        </>
+      )}
 
       <SectionHeader title="Overdue" count={overdueTasks.length} />
       {overdueTasks.length === 0 ? (
@@ -181,6 +219,10 @@ export default function DashboardScreen() {
       />
     </Screen>
   );
+}
+
+function formatQuantity(value?: number): string {
+  return typeof value === 'number' ? String(value) : 'not set';
 }
 
 const styles = StyleSheet.create({
@@ -280,6 +322,41 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: font.small,
     fontWeight: '800',
+  },
+  supplyRow: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.md,
+    minHeight: 68,
+    padding: spacing.lg,
+  },
+  supplyRowPressed: {
+    backgroundColor: colors.surfaceMuted,
+  },
+  supplyIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.amberSurface,
+    borderRadius: radii.md,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
+  },
+  supplyText: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  supplyTitle: {
+    color: colors.text,
+    fontSize: font.body,
+    fontWeight: '800',
+  },
+  supplyMeta: {
+    color: colors.textMuted,
+    fontSize: font.small,
   },
   tipPanel: {
     alignItems: 'flex-start',

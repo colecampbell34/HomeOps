@@ -10,7 +10,7 @@ import { SupplyFormModal } from '../../src/components/SupplyFormModal';
 import { useHomeOps } from '../../src/store/HomeOpsContext';
 import { colors, font, radii, spacing } from '../../src/theme';
 
-type AssetMode = 'appliances' | 'supplies';
+type AssetMode = 'appliances' | 'supplies' | 'low-stock';
 
 export default function AssetsScreen() {
   const router = useRouter();
@@ -21,6 +21,7 @@ export default function AssetsScreen() {
     getApplianceName,
     getRoomName,
     getTaskTitle,
+    lowStockSupplies,
     rooms,
     supplies,
     tasks,
@@ -35,8 +36,12 @@ export default function AssetsScreen() {
       return `${appliances.length} appliance records with model and manual details.`;
     }
 
+    if (mode === 'low-stock') {
+      return `${lowStockSupplies.length} supplies are at or below their stock threshold.`;
+    }
+
     return `${supplies.length} supply records for filters, batteries, parts, and consumables.`;
-  }, [appliances.length, mode, supplies.length]);
+  }, [appliances.length, lowStockSupplies.length, mode, supplies.length]);
 
   const normalizedSearch = searchQuery.trim().toLowerCase();
   const filteredAppliances = useMemo(() => {
@@ -54,16 +59,20 @@ export default function AssetsScreen() {
   }, [appliances, getRoomName, normalizedSearch]);
 
   const filteredSupplies = useMemo(() => {
+    const baseSupplies = mode === 'low-stock' ? lowStockSupplies : supplies;
+
     if (!normalizedSearch) {
-      return supplies;
+      return baseSupplies;
     }
 
-    return supplies.filter((supply) =>
+    return baseSupplies.filter((supply) =>
       [
         supply.name,
         supply.type,
         supply.sizeOrModel,
         supply.brand,
+        supply.lastPurchasedVendor,
+        getRoomName(supply.roomId),
         getApplianceName(supply.applianceId),
         getTaskTitle(supply.taskId),
       ]
@@ -72,7 +81,7 @@ export default function AssetsScreen() {
         .toLowerCase()
         .includes(normalizedSearch),
     );
-  }, [getApplianceName, getTaskTitle, normalizedSearch, supplies]);
+  }, [getApplianceName, getRoomName, getTaskTitle, lowStockSupplies, mode, normalizedSearch, supplies]);
 
   return (
     <Screen>
@@ -95,6 +104,7 @@ export default function AssetsScreen() {
       <View style={styles.segmented}>
         <SegmentButton label="Appliances" selected={mode === 'appliances'} onPress={() => setMode('appliances')} />
         <SegmentButton label="Supplies" selected={mode === 'supplies'} onPress={() => setMode('supplies')} />
+        <SegmentButton label="Low stock" selected={mode === 'low-stock'} onPress={() => setMode('low-stock')} />
       </View>
 
       <View style={styles.searchBox}>
@@ -152,12 +162,14 @@ export default function AssetsScreen() {
         )
       ) : filteredSupplies.length === 0 ? (
         <EmptyState
-          icon="cube-outline"
-          title={supplies.length === 0 ? 'No supplies yet' : 'No supplies found'}
+          icon={mode === 'low-stock' ? 'alert-circle-outline' : 'cube-outline'}
+          title={supplies.length === 0 ? 'No supplies yet' : mode === 'low-stock' ? 'No low-stock supplies' : 'No supplies found'}
           body={
             supplies.length === 0
               ? 'Save filter sizes, batteries, bulbs, cleaning supplies, and replacement parts you buy repeatedly.'
-              : 'Try a different supply, size, model, brand, appliance, or task search.'
+              : mode === 'low-stock'
+                ? 'Set quantity and low-stock thresholds on supplies to track what needs to be reordered.'
+                : 'Try a different supply, size, model, brand, appliance, or task search.'
           }
           actionLabel={supplies.length === 0 ? 'Add supply' : undefined}
           onAction={supplies.length === 0 ? () => setIsSupplyFormOpen(true) : undefined}
@@ -172,12 +184,21 @@ export default function AssetsScreen() {
             style={({ pressed }) => [styles.assetRow, pressed && styles.assetRowPressed]}
           >
             <View style={styles.icon}>
-              <Ionicons name="cube-outline" size={20} color={colors.primary} />
+              <Ionicons
+                name={isLowStock(supply) ? 'alert-circle-outline' : 'cube-outline'}
+                size={20}
+                color={isLowStock(supply) ? colors.amber : colors.primary}
+              />
             </View>
             <View style={styles.rowText}>
               <Text style={styles.rowTitle}>{supply.name}</Text>
               <Text style={styles.rowMeta}>
-                {supply.sizeOrModel || supply.type} · {getApplianceName(supply.applianceId)}
+                {supply.sizeOrModel || supply.type} · {getRoomName(supply.roomId)}
+              </Text>
+              <Text style={styles.rowMeta}>
+                Qty {formatQuantity(supply.quantityOnHand)}
+                {typeof supply.lowStockThreshold === 'number' ? ` · Low at ${supply.lowStockThreshold}` : ''}
+                {supply.applianceId ? ` · ${getApplianceName(supply.applianceId)}` : ''}
               </Text>
               {!!supply.taskId && <Text style={styles.rowMeta}>Task: {getTaskTitle(supply.taskId)}</Text>}
             </View>
@@ -196,12 +217,25 @@ export default function AssetsScreen() {
       <SupplyFormModal
         visible={isSupplyFormOpen}
         appliances={appliances}
+        rooms={rooms}
         tasks={tasks}
         onClose={() => setIsSupplyFormOpen(false)}
         onSubmit={addSupply}
       />
     </Screen>
   );
+}
+
+function isLowStock(supply: { quantityOnHand?: number; lowStockThreshold?: number }) {
+  return (
+    typeof supply.quantityOnHand === 'number' &&
+    typeof supply.lowStockThreshold === 'number' &&
+    supply.quantityOnHand <= supply.lowStockThreshold
+  );
+}
+
+function formatQuantity(value?: number): string {
+  return typeof value === 'number' ? String(value) : 'not set';
 }
 
 function SegmentButton({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {

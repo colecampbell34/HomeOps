@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -18,7 +18,9 @@ export default function ApplianceDetailScreen() {
   const {
     addSupply,
     appliances,
+    archiveAppliance,
     completeTask,
+    completions,
     getRoomName,
     rooms,
     supplies,
@@ -27,10 +29,44 @@ export default function ApplianceDetailScreen() {
   } = useHomeOps();
   const [isEditing, setIsEditing] = useState(false);
   const [isSupplyFormOpen, setIsSupplyFormOpen] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
 
   const appliance = appliances.find((candidate) => candidate.id === id);
+  const applianceTasks = tasks.filter((task) => task.applianceId === id);
   const linkedTasks = tasks.filter((task) => task.applianceId === id || task.roomId === appliance?.roomId);
   const linkedSupplies = supplies.filter((supply) => supply.applianceId === id);
+  const serviceHistory = useMemo(
+    () =>
+      completions
+        .map((completion) => ({
+          ...completion,
+          task: tasks.find((task) => task.id === completion.taskId),
+        }))
+        .filter((completion) => completion.task?.applianceId === id)
+        .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()),
+    [completions, id, tasks],
+  );
+
+  async function handleArchive() {
+    if (!appliance || isArchiving) {
+      return;
+    }
+
+    if (!confirmArchive) {
+      setConfirmArchive(true);
+      return;
+    }
+
+    setIsArchiving(true);
+
+    try {
+      await archiveAppliance(appliance.id);
+      router.replace('/(tabs)/assets');
+    } finally {
+      setIsArchiving(false);
+    }
+  }
 
   if (!appliance) {
     return (
@@ -71,8 +107,23 @@ export default function ApplianceDetailScreen() {
         <InfoCell label="Model" value={appliance.modelNumber || 'Not set'} />
         <InfoCell label="Serial" value={appliance.serialNumber || 'Not set'} />
         <InfoCell label="Purchase date" value={appliance.purchaseDate ? formatLongDate(appliance.purchaseDate) : 'Not set'} />
+        <InfoCell label="Vendor" value={appliance.purchaseVendor || 'Not set'} />
+        <InfoCell label="Warranty" value={appliance.warrantyExpiresAt ? formatLongDate(appliance.warrantyExpiresAt) : 'Not set'} />
         <InfoCell label="Supplies" value={`${linkedSupplies.length} linked`} />
       </View>
+
+      {!!appliance.receiptUrl && (
+        <Pressable accessibilityRole="link" onPress={() => Linking.openURL(appliance.receiptUrl!)} style={styles.linkBlock}>
+          <Ionicons name="receipt-outline" size={20} color={colors.primary} />
+          <View style={styles.linkText}>
+            <Text style={styles.blockTitle}>Receipt link</Text>
+            <Text style={styles.blockText} numberOfLines={2}>
+              {appliance.receiptUrl}
+            </Text>
+          </View>
+          <Ionicons name="open-outline" size={18} color={colors.textMuted} />
+        </Pressable>
+      )}
 
       {!!appliance.manualUrl && (
         <Pressable accessibilityRole="link" onPress={() => Linking.openURL(appliance.manualUrl!)} style={styles.linkBlock}>
@@ -114,7 +165,10 @@ export default function ApplianceDetailScreen() {
             style={styles.supplyRow}
           >
             <Text style={styles.supplyTitle}>{supply.name}</Text>
-            <Text style={styles.supplyMeta}>{supply.sizeOrModel || supply.type}</Text>
+            <Text style={styles.supplyMeta}>
+              {supply.sizeOrModel || supply.type}
+              {typeof supply.quantityOnHand === 'number' ? ` · Qty ${supply.quantityOnHand}` : ''}
+            </Text>
           </Pressable>
         ))
       )}
@@ -130,6 +184,47 @@ export default function ApplianceDetailScreen() {
         />
       ))}
 
+      <SectionHeader title="Service history" count={serviceHistory.length} />
+      {serviceHistory.length === 0 ? (
+        <View style={styles.emptyBlock}>
+          <Text style={styles.emptyTitle}>No service history</Text>
+          <Text style={styles.emptyText}>Completed tasks linked directly to this appliance will appear here.</Text>
+        </View>
+      ) : (
+        <View style={styles.historyList}>
+          {serviceHistory.map((completion) => (
+            <View key={completion.id} style={styles.historyRow}>
+              <View style={styles.historyIcon}>
+                <Ionicons name="checkmark" size={15} color={colors.primary} />
+              </View>
+              <View style={styles.historyText}>
+                <Text style={styles.historyTitle}>{completion.task?.title ?? 'Maintenance task'}</Text>
+                <Text style={styles.historyMeta}>{formatLongDate(completion.completedAt)}</Text>
+                {!!completion.notes && <Text style={styles.historyNotes}>{completion.notes}</Text>}
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {applianceTasks.length === 0 && (
+        <View style={styles.emptyBlock}>
+          <Text style={styles.emptyTitle}>No directly linked tasks</Text>
+          <Text style={styles.emptyText}>Edit a maintenance task and link it to this appliance to build a focused service history.</Text>
+        </View>
+      )}
+
+      <Pressable
+        accessibilityRole="button"
+        onPress={handleArchive}
+        style={({ pressed }) => [styles.archiveButton, pressed && styles.archiveButtonPressed]}
+      >
+        <Ionicons name={confirmArchive ? 'alert-circle-outline' : 'archive-outline'} size={17} color={colors.red} />
+        <Text style={styles.archiveButtonText}>
+          {isArchiving ? 'Archiving' : confirmArchive ? 'Confirm archive appliance' : 'Archive appliance'}
+        </Text>
+      </Pressable>
+
       <ApplianceFormModal
         visible={isEditing}
         rooms={rooms}
@@ -141,7 +236,9 @@ export default function ApplianceDetailScreen() {
       <SupplyFormModal
         visible={isSupplyFormOpen}
         appliances={appliances}
+        rooms={rooms}
         tasks={tasks}
+        defaultRoomId={appliance.roomId}
         defaultApplianceId={appliance.id}
         onClose={() => setIsSupplyFormOpen(false)}
         onSubmit={addSupply}
@@ -327,6 +424,66 @@ const styles = StyleSheet.create({
   supplyMeta: {
     color: colors.textMuted,
     fontSize: font.small,
+  },
+  historyList: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    borderWidth: 1,
+  },
+  historyRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.md,
+    minHeight: 60,
+    padding: spacing.lg,
+  },
+  historyIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.greenSurface,
+    borderRadius: radii.sm,
+    height: 28,
+    justifyContent: 'center',
+    width: 28,
+  },
+  historyText: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  historyTitle: {
+    color: colors.text,
+    fontSize: font.small,
+    fontWeight: '800',
+  },
+  historyMeta: {
+    color: colors.textMuted,
+    fontSize: font.small,
+    lineHeight: 19,
+  },
+  historyNotes: {
+    color: colors.textMuted,
+    fontSize: font.small,
+    lineHeight: 19,
+  },
+  archiveButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderColor: '#F1C7C0',
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    justifyContent: 'center',
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
+  },
+  archiveButtonPressed: {
+    backgroundColor: colors.redSurface,
+  },
+  archiveButtonText: {
+    color: colors.red,
+    fontSize: font.small,
+    fontWeight: '800',
   },
   emptyBlock: {
     backgroundColor: colors.surface,

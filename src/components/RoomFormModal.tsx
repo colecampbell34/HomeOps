@@ -13,7 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, font, radii, spacing } from '../theme';
-import { CreateRoomInput } from '../types';
+import { CreateRoomInput, Room } from '../types';
 
 type RoomOption = {
   label: string;
@@ -21,7 +21,7 @@ type RoomOption = {
   icon: keyof typeof Ionicons.glyphMap;
 };
 
-const roomOptions: RoomOption[] = [
+export const roomOptions: RoomOption[] = [
   { label: 'Kitchen', type: 'kitchen', icon: 'restaurant-outline' },
   { label: 'Bathroom', type: 'bathroom', icon: 'water-outline' },
   { label: 'Bedroom', type: 'bedroom', icon: 'bed-outline' },
@@ -35,24 +35,28 @@ const roomOptions: RoomOption[] = [
 
 type RoomFormModalProps = {
   visible: boolean;
+  initialRoom?: Room;
   onClose: () => void;
   onSubmit: (input: CreateRoomInput) => Promise<void>;
 };
 
-export function RoomFormModal({ visible, onClose, onSubmit }: RoomFormModalProps) {
+export function RoomFormModal({ visible, initialRoom, onClose, onSubmit }: RoomFormModalProps) {
   const [name, setName] = useState('');
   const [selectedType, setSelectedType] = useState(roomOptions[0]);
+  const [notes, setNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const canSave = name.trim().length > 0 && !isSaving;
+  const isEditing = !!initialRoom;
 
   useEffect(() => {
     if (!visible) {
       return;
     }
 
-    setName('');
-    setSelectedType(roomOptions[0]);
-  }, [visible]);
+    setName(initialRoom?.name ?? '');
+    setSelectedType(roomOptions.find((option) => option.type === initialRoom?.type) ?? roomOptions[0]);
+    setNotes(initialRoom?.notes ?? '');
+  }, [initialRoom, visible]);
 
   async function handleSubmit() {
     if (!canSave) {
@@ -66,6 +70,7 @@ export function RoomFormModal({ visible, onClose, onSubmit }: RoomFormModalProps
         name,
         type: selectedType.type,
         icon: selectedType.icon,
+        notes,
       });
       onClose();
     } finally {
@@ -78,10 +83,10 @@ export function RoomFormModal({ visible, onClose, onSubmit }: RoomFormModalProps
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modal}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.eyebrow}>New room</Text>
+            <Text style={styles.eyebrow}>{isEditing ? 'Edit room' : 'New room'}</Text>
             <Text style={styles.title}>Room or area</Text>
           </View>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close add room" onPress={onClose} style={styles.iconButton}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close room form" onPress={onClose} style={styles.iconButton}>
             <Ionicons name="close" size={22} color={colors.text} />
           </Pressable>
         </View>
@@ -90,7 +95,7 @@ export function RoomFormModal({ visible, onClose, onSubmit }: RoomFormModalProps
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Name</Text>
             <TextInput
-              autoFocus
+              autoFocus={!isEditing}
               onChangeText={setName}
               placeholder="Garage, basement, guest bath"
               placeholderTextColor={colors.textMuted}
@@ -121,6 +126,18 @@ export function RoomFormModal({ visible, onClose, onSubmit }: RoomFormModalProps
               ))}
             </View>
           </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Notes</Text>
+            <TextInput
+              multiline
+              onChangeText={setNotes}
+              placeholder="Storage locations, shutoffs, quirks, or useful room details"
+              placeholderTextColor={colors.textMuted}
+              style={[styles.input, styles.notesInput]}
+              value={notes}
+            />
+          </View>
         </ScrollView>
 
         <View style={styles.footer}>
@@ -133,8 +150,8 @@ export function RoomFormModal({ visible, onClose, onSubmit }: RoomFormModalProps
             onPress={handleSubmit}
             style={({ pressed }) => [styles.primaryButton, (!canSave || pressed) && styles.primaryButtonMuted]}
           >
-            <Ionicons name="add" size={17} color={colors.white} />
-            <Text style={styles.primaryButtonText}>{isSaving ? 'Saving' : 'Add room'}</Text>
+            <Ionicons name={isEditing ? 'checkmark' : 'add'} size={17} color={colors.white} />
+            <Text style={styles.primaryButtonText}>{isSaving ? 'Saving' : isEditing ? 'Save room' : 'Add room'}</Text>
           </Pressable>
         </View>
       </KeyboardAvoidingView>
@@ -195,6 +212,11 @@ const styles = StyleSheet.create({
     fontSize: font.body,
     minHeight: 48,
     paddingHorizontal: spacing.md,
+  },
+  notesInput: {
+    minHeight: 94,
+    paddingTop: spacing.md,
+    textAlignVertical: 'top',
   },
   optionGrid: {
     flexDirection: 'row',
